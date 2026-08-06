@@ -1,0 +1,8 @@
+PrismaClientKnownRequestError: 
+Invalid `prisma.lead.count()` invocation:
+
+
+Transaction API error: Unable to start a transaction in the given time.
+    at zr.handleRequestError (D:\codebase\oneaiassist_v1\node_modules\@prisma\client\runtime\client.js:65:8286)
+    at zr.handleAndLogRequestError (D:\codebase\oneaiassist_v1\node_modules\@prisma\client\runtime\client.js:65:7581)
+    at zr.request (D:\codebase\oneaiassist_v1\node_modules\@prisma\client\runtime\client.js:65:7288)

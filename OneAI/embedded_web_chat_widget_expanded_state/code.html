@@ -1,0 +1,256 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>OneAIAssist Chat Widget</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed": "#dbe1ff",
+                        "primary": "#004ac6",
+                        "inverse-surface": "#263143",
+                        "background": "#f9f9ff",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#dee8ff",
+                        "on-surface": "#111c2d",
+                        "on-primary-fixed": "#00174b",
+                        "primary-container": "#2563eb",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "surface-container": "#e7eeff",
+                        "outline": "#737686",
+                        "surface-variant": "#d8e3fb",
+                        "secondary": "#565e74",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-error-container": "#93000a",
+                        "surface-tint": "#0053db",
+                        "inverse-primary": "#b4c5ff",
+                        "inverse-on-surface": "#ecf1ff",
+                        "tertiary": "#005e6e",
+                        "on-background": "#111c2d",
+                        "tertiary-fixed-dim": "#4cd7f6",
+                        "tertiary-fixed": "#acedff",
+                        "on-primary-container": "#eeefff",
+                        "on-tertiary-container": "#d7f6ff",
+                        "on-secondary-fixed": "#131b2e",
+                        "tertiary-container": "#00788c",
+                        "surface": "#f9f9ff",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "on-secondary-container": "#5c647a",
+                        "surface-bright": "#f9f9ff",
+                        "outline-variant": "#c3c6d7",
+                        "secondary-container": "#dae2fd",
+                        "on-tertiary-fixed-variant": "#004e5c",
+                        "surface-container-low": "#f0f3ff",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-fixed": "#001f26",
+                        "error-container": "#ffdad6",
+                        "surface-container-highest": "#d8e3fb",
+                        "surface-dim": "#cfdaf2",
+                        "on-tertiary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-surface-variant": "#434655",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed": "#dae2fd",
+                        "on-error": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "md": "16px",
+                        "margin-mobile": "16px",
+                        "2xl": "48px",
+                        "sm": "8px",
+                        "base": "4px",
+                        "xs": "4px",
+                        "xl": "32px",
+                        "3xl": "64px",
+                        "margin-desktop": "32px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "label-md": ["14px", {"lineHeight": "1", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                        "headline-lg": ["32px", {"lineHeight": "1.25", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "1.55", "fontWeight": "400"}],
+                        "label-sm": ["12px", {"lineHeight": "1", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .chat-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .chat-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        .glass-bg {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="bg-background font-body-md text-on-surface min-h-screen relative overflow-hidden">
+<!-- Website Background Placeholder (Blurred Context) -->
+<div class="fixed inset-0 z-0 overflow-hidden select-none pointer-events-none">
+<div class="absolute inset-0 bg-surface-container-low/60 blur-3xl opacity-50"></div>
+<div class="max-w-7xl mx-auto px-margin-desktop py-2xl opacity-20 filter blur-[2px]">
+<div class="h-12 w-48 bg-outline-variant rounded mb-lg"></div>
+<div class="grid grid-cols-12 gap-gutter">
+<div class="col-span-8 space-y-md">
+<div class="h-20 bg-outline-variant rounded-xl w-3/4"></div>
+<div class="h-4 bg-outline-variant rounded w-full"></div>
+<div class="h-4 bg-outline-variant rounded w-5/6"></div>
+<div class="grid grid-cols-3 gap-md pt-lg">
+<div class="h-40 bg-outline-variant rounded-xl"></div>
+<div class="h-40 bg-outline-variant rounded-xl"></div>
+<div class="h-40 bg-outline-variant rounded-xl"></div>
+</div>
+</div>
+<div class="col-span-4 h-96 bg-outline-variant rounded-xl"></div>
+</div>
+</div>
+</div>
+<!-- Chat Widget Container -->
+<div class="fixed bottom-lg right-lg z-50 flex flex-col items-end gap-sm">
+<!-- Expanded Widget Panel -->
+<div class="w-[380px] h-[600px] bg-surface-container-lowest rounded-xl shadow-[0px_20px_50px_rgba(15,23,42,0.15)] border border-outline-variant flex flex-col overflow-hidden transition-all duration-300 transform scale-100 opacity-100" id="chat-panel">
+<!-- Header Component -->
+<header class="bg-primary-container p-md flex items-center justify-between text-on-primary-container">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-white/20">
+<img class="w-8 h-8 object-contain" data-alt="A professional logo for Acme Health Insurance featuring a minimalist blue shield icon and clean sans-serif typography. The style is modern, corporate, and trustworthy, perfectly fitting a high-end insurance company's visual identity. High-key studio lighting ensures clarity and professional shine." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZ6Nc32oZ2EA4FSUPSLQ1xqSy_57ZEBF9UqC9SLTzTzTwOd3G3pnO_v2flro8vgNCZwdV9yJAhn6I17SegdkKvXp6xT-qfbg4mGOY-UdTz18Yh9wIO0QI0sq14GovFxJQ4LLDbxcaeGqMgN1QV74eRt5PLveeumQc4Sr8bPHLrILxirSiaY2WJGLUuvvNuPWHc7UM-CbzL5j2zLN8RmkTS_ZzoU9aVyApcvPb-HK1RKfjDEbMi_t5vEyLAkCQlMfV3mfyKhLpMsA4V">
+</div>
+<div>
+<h1 class="font-headline-md text-body-md leading-tight">Acme Health Insurance</h1>
+<div class="flex items-center gap-xs">
+<span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+<span class="font-label-sm text-[10px] opacity-90 uppercase tracking-wider">Online</span>
+</div>
+</div>
+</div>
+<button class="p-xs hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center" onclick="toggleChat()">
+<span class="material-symbols-outlined text-on-primary-container">close</span>
+</button>
+</header>
+<!-- Chat Stream -->
+<div class="flex-1 overflow-y-auto p-md space-y-md chat-scroll bg-surface">
+<!-- Bot Greeting -->
+<div class="flex flex-col gap-xs max-w-[85%]">
+<div class="bg-surface-container-high p-md rounded-xl rounded-tl-none border border-outline-variant/30">
+<p class="font-body-sm text-on-surface">Hi! I'm here to help you find the right health insurance plan. Ready to get started?</p>
+</div>
+<span class="text-[10px] text-outline font-label-sm ml-1">Bot • 2m ago</span>
+</div>
+<!-- Quick Replies -->
+<div class="flex flex-wrap gap-sm pt-xs">
+<button class="bg-primary-container text-on-primary-container px-md py-2 rounded-full font-label-md hover:bg-primary transition-all active:scale-95 shadow-sm">
+                        Yes, let's go
+                    </button>
+<button class="bg-white border border-primary text-primary px-md py-2 rounded-full font-label-md hover:bg-primary-fixed transition-all active:scale-95">
+                        Just browsing
+                    </button>
+</div>
+<!-- User Reply -->
+<div class="flex flex-col gap-xs items-end ml-auto max-w-[80%]">
+<div class="bg-primary-container p-md rounded-xl rounded-tr-none shadow-sm">
+<p class="font-body-sm text-on-primary-container">Yes, let's go</p>
+</div>
+<span class="text-[10px] text-outline font-label-sm mr-1">You • Just now</span>
+</div>
+<!-- Bot Follow-up -->
+<div class="flex flex-col gap-xs max-w-[85%] animate-in fade-in slide-in-from-bottom-2 duration-500">
+<div class="bg-surface-container-high p-md rounded-xl rounded-tl-none border border-outline-variant/30">
+<p class="font-body-sm text-on-surface">Great! To give you the most accurate quotes, could you tell me your age?</p>
+</div>
+<div class="flex items-center gap-xs ml-1">
+<span class="text-[10px] text-outline font-label-sm">Bot • Typing...</span>
+</div>
+</div>
+</div>
+<!-- Footer Section -->
+<div class="bg-surface border-t border-outline-variant/50 p-md space-y-sm">
+<!-- Consent & Handoff -->
+<div class="flex flex-col gap-xs">
+<p class="text-[11px] text-outline leading-tight">
+                        By chatting you agree to our <a class="text-primary hover:underline" href="#">Privacy Policy</a>.
+                    </p>
+<label class="flex items-center gap-sm cursor-pointer group">
+<div class="relative flex items-center">
+<input class="peer h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary-fixed transition-all" type="checkbox">
+</div>
+<span class="text-body-sm text-secondary group-hover:text-primary transition-colors flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px] text-[#25D366]" style="font-variation-settings: 'FILL' 1;">chat</span>
+                            Continue on WhatsApp
+                        </span>
+</label>
+</div>
+<!-- Composer -->
+<div class="relative flex items-center">
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-xl py-md pl-md pr-12 text-body-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all" placeholder="Type your message..." type="text">
+<button class="absolute right-2 p-2 bg-primary-container text-on-primary-container rounded-lg hover:bg-primary transition-colors flex items-center justify-center active:scale-90">
+<span class="material-symbols-outlined text-[20px]">send</span>
+</button>
+</div>
+<!-- Brand Attribution -->
+<div class="flex justify-center items-center gap-xs pt-1">
+<span class="text-[10px] text-outline-variant font-label-sm uppercase tracking-tighter">Powered by</span>
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">OneAIAssist</span>
+</div>
+</div>
+</div>
+<!-- FAB (Toggle Button) -->
+<button class="h-14 w-14 bg-primary-container text-on-primary-container rounded-full shadow-lg flex items-center justify-center hover:shadow-xl transition-all active:scale-95 group overflow-hidden" id="chat-fab" onclick="toggleChat()">
+<span class="material-symbols-outlined text-[28px] transition-transform duration-300 group-hover:scale-110">chat</span>
+</button>
+</div>
+<script>
+        let isOpen = true;
+        const panel = document.getElementById('chat-panel');
+        const fab = document.getElementById('chat-fab');
+
+        function toggleChat() {
+            isOpen = !isOpen;
+            if (isOpen) {
+                panel.classList.remove('scale-95', 'opacity-0', 'pointer-events-none', 'translate-y-4');
+                panel.classList.add('scale-100', 'opacity-100', 'translate-y-0');
+                fab.querySelector('span').textContent = 'chat';
+            } else {
+                panel.classList.add('scale-95', 'opacity-0', 'pointer-events-none', 'translate-y-4');
+                panel.classList.remove('scale-100', 'opacity-100', 'translate-y-0');
+                fab.querySelector('span').textContent = 'question_answer';
+            }
+        }
+
+        // Initialize view
+        document.addEventListener('DOMContentLoaded', () => {
+            // Panel is open by default as requested in prompt
+        });
+    </script>
+</body></html>

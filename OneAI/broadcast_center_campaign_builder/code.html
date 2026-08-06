@@ -1,0 +1,464 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Broadcast Center | OneAIAssist</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-variant": "#d8e3fb",
+                    "on-tertiary-fixed-variant": "#004e5c",
+                    "surface-container-high": "#dee8ff",
+                    "surface-bright": "#f9f9ff",
+                    "secondary": "#565e74",
+                    "surface-container-lowest": "#ffffff",
+                    "on-error-container": "#93000a",
+                    "secondary-fixed-dim": "#bec6e0",
+                    "error": "#ba1a1a",
+                    "on-secondary-fixed-variant": "#3f465c",
+                    "on-primary-fixed-variant": "#003ea8",
+                    "surface-tint": "#0053db",
+                    "secondary-fixed": "#dae2fd",
+                    "on-tertiary": "#ffffff",
+                    "tertiary-fixed": "#acedff",
+                    "surface-dim": "#cfdaf2",
+                    "primary-fixed-dim": "#b4c5ff",
+                    "on-secondary": "#ffffff",
+                    "on-surface": "#111c2d",
+                    "on-primary": "#ffffff",
+                    "on-secondary-fixed": "#131b2e",
+                    "inverse-on-surface": "#ecf1ff",
+                    "surface-container-low": "#f0f3ff",
+                    "tertiary-container": "#00788c",
+                    "background": "#f9f9ff",
+                    "inverse-primary": "#b4c5ff",
+                    "primary-container": "#2563eb",
+                    "outline-variant": "#c3c6d7",
+                    "on-tertiary-container": "#d7f6ff",
+                    "surface": "#f9f9ff",
+                    "on-secondary-container": "#5c647a",
+                    "outline": "#737686",
+                    "on-primary-fixed": "#00174b",
+                    "on-error": "#ffffff",
+                    "surface-container-highest": "#d8e3fb",
+                    "primary": "#004ac6",
+                    "tertiary": "#005e6e",
+                    "on-background": "#111c2d",
+                    "on-tertiary-fixed": "#001f26",
+                    "on-surface-variant": "#434655",
+                    "error-container": "#ffdad6",
+                    "on-primary-container": "#eeefff",
+                    "tertiary-fixed-dim": "#4cd7f6",
+                    "secondary-container": "#dae2fd",
+                    "surface-container": "#e7eeff",
+                    "primary-fixed": "#dbe1ff",
+                    "inverse-surface": "#263143"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "base": "4px",
+                    "lg": "24px",
+                    "xs": "4px",
+                    "gutter": "24px",
+                    "3xl": "64px",
+                    "margin-mobile": "16px",
+                    "xl": "32px",
+                    "md": "16px",
+                    "sm": "8px",
+                    "margin-desktop": "32px",
+                    "2xl": "48px"
+            },
+            "fontFamily": {
+                    "body-lg": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "body-md": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "label-md": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-sm": ["Inter"]
+            },
+            "fontSize": {
+                    "body-lg": ["18px", {"lineHeight": "1.55", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "1", "fontWeight": "600"}],
+                    "label-md": ["14px", {"lineHeight": "1", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                    "headline-lg": ["32px", {"lineHeight": "1.25", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #f9f9ff; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .active-nav { color: #004ac6 !important; font-weight: 700; }
+        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid #CBD5E1; }
+        .wa-bubble { background-color: #DCF8C6; border-radius: 7.5px; position: relative; }
+        .wa-bubble::after { content: ''; position: absolute; left: -10px; top: 0; width: 0; height: 0; border: 10px solid transparent; border-top-color: #DCF8C6; }
+    </style>
+</head>
+<body class="text-on-surface">
+<!-- Sidebar Navigation -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-low border-r border-outline-variant flex flex-col py-md px-sm z-30">
+<div class="px-md mb-xl">
+<h1 class="text-headline-md font-headline-md font-bold text-primary">OneAIAssist</h1>
+<p class="text-label-sm text-on-surface-variant">Tenant Admin</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-md py-sm rounded-lg text-on-secondary-fixed-variant hover:bg-secondary-container transition-colors group" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-md py-sm rounded-lg text-on-secondary-fixed-variant hover:bg-secondary-container transition-colors group" href="#">
+<span class="material-symbols-outlined">inbox</span>
+<span class="font-label-md text-label-md">Inbox</span>
+</a>
+<a class="flex items-center gap-3 px-md py-sm rounded-lg text-on-secondary-fixed-variant hover:bg-secondary-container transition-colors group" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-label-md text-label-md">Templates</span>
+</a>
+<a class="flex items-center gap-3 px-md py-sm rounded-lg text-on-secondary-fixed-variant hover:bg-secondary-container transition-colors group" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-md text-label-md">Leads</span>
+</a>
+<a class="flex items-center gap-3 px-md py-sm rounded-lg text-on-secondary-fixed-variant hover:bg-secondary-container transition-colors group" href="#">
+<span class="material-symbols-outlined">person_search</span>
+<span class="font-label-md text-label-md">Customers</span>
+</a>
+<a class="flex items-center gap-3 px-md py-sm rounded-lg active-nav bg-secondary-container transition-colors group" href="#">
+<span class="material-symbols-outlined">campaign</span>
+<span class="font-label-md text-label-md">Broadcast</span>
+</a>
+<a class="flex items-center gap-3 px-md py-sm rounded-lg text-on-secondary-fixed-variant hover:bg-secondary-container transition-colors group" href="#">
+<span class="material-symbols-outlined">auto_mode</span>
+<span class="font-label-md text-label-md">Sequences</span>
+</a>
+<a class="flex items-center gap-3 px-md py-sm rounded-lg text-on-secondary-fixed-variant hover:bg-secondary-container transition-colors group" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</nav>
+<div class="mt-auto px-md py-md flex items-center gap-3 border-t border-outline-variant pt-md">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-white font-bold">JD</div>
+<div>
+<p class="text-label-md font-bold text-on-surface">Admin User</p>
+<p class="text-label-sm text-on-surface-variant">Admin</p>
+</div>
+</div>
+</aside>
+<!-- Main Content Wrapper -->
+<div class="ml-64 min-h-screen flex flex-col">
+<!-- Top App Bar -->
+<header class="sticky top-0 z-20 bg-surface shadow-sm h-16 flex items-center justify-between px-xl">
+<h2 class="text-headline-md font-headline-md text-on-surface">New Broadcast</h2>
+<div class="flex items-center gap-md">
+<button class="px-md py-2 rounded-lg border border-outline text-on-surface-variant font-label-md hover:bg-surface-container-highest transition-all scale-95 active:scale-90">
+                    Save as Draft
+                </button>
+<button class="px-md py-2 rounded-lg bg-primary text-white font-label-md hover:opacity-90 transition-all shadow-sm flex items-center gap-2 scale-95 active:scale-90">
+<span class="material-symbols-outlined text-[18px]">send</span>
+                    Schedule/Send
+                </button>
+<div class="h-6 w-[1px] bg-outline-variant mx-sm"></div>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</div>
+</header>
+<!-- Main Body -->
+<main class="flex-1 p-xl">
+<!-- Broadcast Builder Card -->
+<div class="max-w-[1000px] mx-auto mb-2xl">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-lg items-start">
+<!-- Left: Form Controls -->
+<div class="lg:col-span-7 bg-white p-xl rounded-xl border border-outline-variant shadow-sm space-y-xl">
+<!-- 1. Template Selector -->
+<section>
+<label class="block text-label-md font-bold text-on-surface mb-sm">1. Select WhatsApp Template</label>
+<select class="w-full border border-outline-variant rounded-lg p-md text-body-md focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+<option>Marketing: Policy Renewal Reminder</option>
+<option>Utility: Payment Confirmation</option>
+<option>Marketing: Flash Sale - Premium</option>
+<option>Authentication: OTP Verification</option>
+</select>
+<p class="text-label-sm text-on-surface-variant mt-2 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-green-600">check_circle</span>
+                                Approved by Meta
+                            </p>
+</section>
+<!-- 2. Recipient Selector -->
+<section>
+<label class="block text-label-md font-bold text-on-surface mb-sm">2. Select Recipients</label>
+<div class="grid grid-cols-2 gap-sm">
+<label class="flex items-center gap-3 p-md border border-outline-variant rounded-lg cursor-pointer hover:bg-surface-container-low transition-colors">
+<input checked="" class="text-primary focus:ring-primary" name="recipients" type="radio">
+<span class="text-body-sm">All Contacts</span>
+</label>
+<label class="flex items-center gap-3 p-md border border-outline-variant rounded-lg cursor-pointer hover:bg-surface-container-low transition-colors">
+<input class="text-primary focus:ring-primary" name="recipients" type="radio">
+<span class="text-body-sm">By Tag</span>
+</label>
+<label class="flex items-center gap-3 p-md border border-outline-variant rounded-lg cursor-pointer hover:bg-surface-container-low transition-colors">
+<input class="text-primary focus:ring-primary" name="recipients" type="radio">
+<span class="text-body-sm">By Pipeline Stage</span>
+</label>
+<label class="flex items-center gap-3 p-md border border-outline-variant rounded-lg cursor-pointer hover:bg-surface-container-low transition-colors">
+<input class="text-primary focus:ring-primary" name="recipients" type="radio">
+<span class="text-body-sm">By Date Range</span>
+</label>
+</div>
+<div class="mt-md flex items-center justify-between">
+<div class="flex items-center gap-2 bg-primary-fixed text-on-primary-fixed px-md py-sm rounded-full">
+<span class="material-symbols-outlined text-[18px]">group</span>
+<span class="text-label-md font-bold">2,340 recipients targetted</span>
+</div>
+<div class="flex items-center gap-1 text-on-error-container bg-error-container px-sm py-1 rounded-full text-label-sm">
+<span class="material-symbols-outlined text-[14px]">block</span>
+                                    128 opted-out excluded
+                                </div>
+</div>
+</section>
+<!-- 3. Personalization Variables -->
+<section>
+<label class="block text-label-md font-bold text-on-surface mb-sm">3. Personalization Variables</label>
+<div class="flex flex-wrap gap-sm">
+<button class="px-md py-2 bg-surface-container-high rounded-lg text-label-sm font-bold text-primary hover:bg-primary-fixed transition-colors border border-transparent">
+                                    {{name}}
+                                </button>
+<button class="px-md py-2 bg-surface-container-high rounded-lg text-label-sm font-bold text-primary hover:bg-primary-fixed transition-colors border border-transparent">
+                                    {{policy_number}}
+                                </button>
+<button class="px-md py-2 bg-surface-container-high rounded-lg text-label-sm font-bold text-primary hover:bg-primary-fixed transition-colors border border-transparent">
+                                    {{last_interaction}}
+                                </button>
+<button class="px-md py-2 bg-surface-container-high rounded-lg text-label-sm font-bold text-primary hover:bg-primary-fixed transition-colors border border-transparent">
+                                    {{due_date}}
+                                </button>
+<button class="p-2 text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined">add_circle</span>
+</button>
+</div>
+</section>
+<!-- 5. Schedule Section -->
+<section>
+<label class="block text-label-md font-bold text-on-surface mb-sm">4. Scheduling</label>
+<div class="space-y-sm">
+<label class="flex items-center gap-3 cursor-pointer">
+<input checked="" class="text-primary" name="schedule" type="radio">
+<span class="text-body-sm">Send Now</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer" id="scheduleLaterBtn">
+<input class="text-primary" name="schedule" type="radio">
+<span class="text-body-sm">Schedule for Later</span>
+</label>
+<div class="hidden mt-sm pl-md" id="dateTimePicker">
+<div class="flex gap-md">
+<input class="border border-outline-variant rounded-lg p-sm text-body-sm" type="date">
+<input class="border border-outline-variant rounded-lg p-sm text-body-sm" type="time">
+</div>
+</div>
+</div>
+</section>
+<!-- 6. Cost Estimate -->
+<section class="bg-surface-container-highest p-md rounded-lg border-l-4 border-primary">
+<div class="flex items-start gap-md">
+<span class="material-symbols-outlined text-primary">payments</span>
+<div>
+<p class="text-label-md font-bold text-on-surface">Estimated cost: $46.80</p>
+<p class="text-body-sm text-on-surface-variant">2,340 conversations @ Marketing rate ($0.020/ea)</p>
+</div>
+</div>
+</section>
+</div>
+<!-- Right: Live Preview -->
+<div class="lg:col-span-5 sticky top-24">
+<div class="bg-slate-200 p-lg rounded-3xl border-[8px] border-slate-800 shadow-2xl relative overflow-hidden h-[600px]">
+<div class="absolute inset-0 opacity-40 bg-cover bg-center" data-alt="A detailed digital rendering of a mobile phone wallpaper with soft blue and green gradients, maintaining a high-end corporate aesthetic for a business messaging application. The background is subtle, clean, and modern." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCpk1taq2z_Jm2xyYkHrEW_0Jdq76SQO6reK3EY2aHJln5WB25nTDIq--KT94105SslLQ94UYwLkjtd2EqSaZNv-5ieN8SB5gsPIQ8kcLeOlYbWWFiBTx-T7iRUxScnzyrC6mLFumhu9Zc3vA1gx2jWYuZMBR-1vYMBNYUOmpuVD6QYhnt2M0wcORpZ4IFMIYZu5l40BzG_Y4TpsJZzqBagz6XhVAodANJel07X04Xj93X-Axv0WtNQ4DlzqtwwFTXCb0Ypi9wn2Wka')"></div>
+<div class="relative z-10 flex flex-col h-full">
+<div class="bg-white/80 backdrop-blur-md p-md rounded-t-xl flex items-center gap-3 border-b border-slate-300">
+<div class="w-10 h-10 rounded-full bg-primary-container"></div>
+<div>
+<p class="text-label-sm font-bold">OneAIAssist Official</p>
+<p class="text-[10px] text-green-600">online</p>
+</div>
+</div>
+<div class="flex-1 p-md flex flex-col gap-4 overflow-y-auto">
+<!-- WhatsApp Bubble -->
+<div class="wa-bubble p-md shadow-sm self-start max-w-[85%] text-[14px]">
+<p class="font-bold text-primary-container text-[12px] mb-1">POLICY UPDATE</p>
+<p class="text-slate-800">Hello <span class="bg-primary/20 text-primary-container font-bold px-1 rounded">{{name}}</span>,</p>
+<p class="mt-2 text-slate-800">Your policy number <span class="bg-primary/20 text-primary-container font-bold px-1 rounded">{{policy_number}}</span> is due for renewal on <span class="font-bold">Oct 24, 2023</span>.</p>
+<p class="mt-2 text-slate-800">Please complete the renewal before <span class="bg-primary/20 text-primary-container font-bold px-1 rounded">{{last_interaction}}</span> to keep your current benefits active.</p>
+<div class="mt-3 flex flex-col gap-2">
+<button class="w-full bg-white py-2 rounded-lg text-primary text-[13px] font-bold shadow-sm border border-slate-200">Renew Now</button>
+<button class="w-full bg-white py-2 rounded-lg text-primary text-[13px] font-bold shadow-sm border border-slate-200">Contact Agent</button>
+</div>
+<div class="text-[10px] text-slate-500 text-right mt-1 italic">10:42 AM</div>
+</div>
+</div>
+</div>
+<div class="absolute bottom-4 left-1/2 -translate-x-1/2 w-1/3 h-1 bg-slate-800 rounded-full"></div>
+</div>
+<p class="text-center text-label-sm text-on-surface-variant mt-md">Realistic WhatsApp preview (Mobile View)</p>
+</div>
+</div>
+</div>
+<!-- Campaign History Section -->
+<section class="max-w-[1200px] mx-auto mt-3xl">
+<div class="flex items-center justify-between mb-lg">
+<h3 class="text-headline-md font-headline-md text-on-surface">Recent Campaigns</h3>
+<div class="flex gap-sm">
+<button class="p-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+<button class="p-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined">download</span>
+</button>
+</div>
+</div>
+<div class="bg-white rounded-xl border border-outline-variant overflow-hidden shadow-sm">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="px-lg py-md text-label-md font-bold text-on-surface-variant">Campaign Name</th>
+<th class="px-lg py-md text-label-md font-bold text-on-surface-variant">Sent Date</th>
+<th class="px-lg py-md text-label-md font-bold text-on-surface-variant">Recipients</th>
+<th class="px-lg py-md text-label-md font-bold text-on-surface-variant text-center">Delivered</th>
+<th class="px-lg py-md text-label-md font-bold text-on-surface-variant text-center">Read</th>
+<th class="px-lg py-md text-label-md font-bold text-on-surface-variant text-center">Replied</th>
+<th class="px-lg py-md text-label-md font-bold text-on-surface-variant text-center">Converted</th>
+<th class="px-lg py-md text-label-md font-bold text-on-surface-variant">Cost</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="px-lg py-md font-bold text-primary">Renewal Reminder Oct-23</td>
+<td class="px-lg py-md text-body-sm">Oct 05, 2023, 09:00 AM</td>
+<td class="px-lg py-md text-body-sm">1,240</td>
+<td class="px-lg py-md text-center">
+<div class="w-16 mx-auto bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-green-500 h-full" style="width: 98%"></div>
+</div>
+<span class="text-[10px] font-bold">98%</span>
+</td>
+<td class="px-lg py-md text-center">
+<div class="w-16 mx-auto bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-blue-500 h-full" style="width: 82%"></div>
+</div>
+<span class="text-[10px] font-bold">82%</span>
+</td>
+<td class="px-lg py-md text-center">
+<div class="w-16 mx-auto bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full" style="width: 14%"></div>
+</div>
+<span class="text-[10px] font-bold">14%</span>
+</td>
+<td class="px-lg py-md text-center">
+<span class="bg-green-100 text-green-700 px-sm py-1 rounded-full text-label-sm font-bold">8.2%</span>
+</td>
+<td class="px-lg py-md text-body-sm">$24.80</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="px-lg py-md font-bold text-primary">NPS Survey - Support</td>
+<td class="px-lg py-md text-body-sm">Sep 28, 2023, 02:30 PM</td>
+<td class="px-lg py-md text-body-sm">450</td>
+<td class="px-lg py-md text-center">
+<div class="w-16 mx-auto bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-green-500 h-full" style="width: 99%"></div>
+</div>
+<span class="text-[10px] font-bold">99%</span>
+</td>
+<td class="px-lg py-md text-center">
+<div class="w-16 mx-auto bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-blue-500 h-full" style="width: 76%"></div>
+</div>
+<span class="text-[10px] font-bold">76%</span>
+</td>
+<td class="px-lg py-md text-center">
+<div class="w-16 mx-auto bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full" style="width: 28%"></div>
+</div>
+<span class="text-[10px] font-bold">28%</span>
+</td>
+<td class="px-lg py-md text-center">
+<span class="bg-green-100 text-green-700 px-sm py-1 rounded-full text-label-sm font-bold">12.5%</span>
+</td>
+<td class="px-lg py-md text-body-sm">$9.00</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="px-lg py-md font-bold text-primary">Flash Sale - VIPs</td>
+<td class="px-lg py-md text-body-sm">Sep 15, 2023, 10:00 AM</td>
+<td class="px-lg py-md text-body-sm">5,000</td>
+<td class="px-lg py-md text-center">
+<div class="w-16 mx-auto bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-green-500 h-full" style="width: 94%"></div>
+</div>
+<span class="text-[10px] font-bold">94%</span>
+</td>
+<td class="px-lg py-md text-center">
+<div class="w-16 mx-auto bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-blue-500 h-full" style="width: 68%"></div>
+</div>
+<span class="text-[10px] font-bold">68%</span>
+</td>
+<td class="px-lg py-md text-center">
+<div class="w-16 mx-auto bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full" style="width: 5%"></div>
+</div>
+<span class="text-[10px] font-bold">5%</span>
+</td>
+<td class="px-lg py-md text-center">
+<span class="bg-green-100 text-green-700 px-sm py-1 rounded-full text-label-sm font-bold">2.1%</span>
+</td>
+<td class="px-lg py-md text-body-sm">$100.00</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+</div>
+<script>
+        // Micro-interaction for showing date picker
+        const scheduleLaterBtn = document.getElementById('scheduleLaterBtn');
+        const dateTimePicker = document.getElementById('dateTimePicker');
+        const radioButtons = document.getElementsByName('schedule');
+
+        radioButtons.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (e.target.closest('#scheduleLaterBtn')) {
+                    dateTimePicker.classList.remove('hidden');
+                    dateTimePicker.classList.add('animate-in', 'fade-in', 'slide-in-from-top-2');
+                } else {
+                    dateTimePicker.classList.add('hidden');
+                }
+            });
+        });
+
+        // Hover animations for variable chips
+        const chips = document.querySelectorAll('button.bg-surface-container-high');
+        chips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                chip.classList.add('ring-2', 'ring-primary', 'scale-105');
+                setTimeout(() => chip.classList.remove('scale-105'), 150);
+            });
+        });
+    </script>
+</body></html>

@@ -1,0 +1,517 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Lead Pipeline | OneAIAssist</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<style>
+    body {
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+    .kanban-column {
+      min-width: 320px;
+      max-width: 320px;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      height: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+      font-size: 20px;
+    }
+  </style>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "tertiary-container": "#00788c",
+            "surface-variant": "#d8e3fb",
+            "surface-dim": "#cfdaf2",
+            "primary": "#004ac6",
+            "on-primary-fixed-variant": "#003ea8",
+            "on-secondary-fixed": "#131b2e",
+            "secondary-container": "#dae2fd",
+            "on-surface-variant": "#434655",
+            "tertiary-fixed": "#acedff",
+            "outline-variant": "#c3c6d7",
+            "surface-bright": "#f9f9ff",
+            "secondary-fixed-dim": "#bec6e0",
+            "surface-container": "#e7eeff",
+            "surface-tint": "#0053db",
+            "secondary-fixed": "#dae2fd",
+            "secondary": "#565e74",
+            "on-surface": "#111c2d",
+            "on-tertiary-fixed": "#001f26",
+            "on-secondary-fixed-variant": "#3f465c",
+            "on-primary": "#ffffff",
+            "primary-fixed": "#dbe1ff",
+            "on-error": "#ffffff",
+            "tertiary": "#005e6e",
+            "surface-container-lowest": "#ffffff",
+            "inverse-on-surface": "#ecf1ff",
+            "primary-container": "#2563eb",
+            "background": "#f9f9ff",
+            "on-secondary-container": "#5c647a",
+            "on-error-container": "#93000a",
+            "on-background": "#111c2d",
+            "surface-container-highest": "#d8e3fb",
+            "on-tertiary-container": "#d7f6ff",
+            "tertiary-fixed-dim": "#4cd7f6",
+            "surface-container-low": "#f0f3ff",
+            "on-tertiary": "#ffffff",
+            "on-primary-fixed": "#00174b",
+            "surface-container-high": "#dee8ff",
+            "error-container": "#ffdad6",
+            "primary-fixed-dim": "#b4c5ff",
+            "on-secondary": "#ffffff",
+            "on-primary-container": "#eeefff",
+            "inverse-surface": "#263143",
+            "inverse-primary": "#b4c5ff",
+            "surface": "#f9f9ff",
+            "on-tertiary-fixed-variant": "#004e5c",
+            "outline": "#737686",
+            "error": "#ba1a1a"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "xs": "4px",
+            "xl": "32px",
+            "base": "4px",
+            "margin-desktop": "32px",
+            "3xl": "64px",
+            "gutter": "24px",
+            "margin-mobile": "16px",
+            "lg": "24px",
+            "2xl": "48px",
+            "sm": "8px",
+            "md": "16px"
+          },
+          "fontFamily": {
+            "label-md": ["Inter"],
+            "body-sm": ["Inter"],
+            "headline-md": ["Inter"],
+            "body-md": ["Inter"],
+            "display-lg-mobile": ["Inter"],
+            "body-lg": ["Inter"],
+            "headline-lg": ["Inter"],
+            "display-lg": ["Inter"],
+            "label-sm": ["Inter"]
+          },
+          "fontSize": {
+            "label-md": ["14px", { "lineHeight": "1", "letterSpacing": "0.01em", "fontWeight": "500" }],
+            "body-sm": ["14px", { "lineHeight": "1.4", "fontWeight": "400" }],
+            "headline-md": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+            "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+            "display-lg-mobile": ["36px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "body-lg": ["18px", { "lineHeight": "1.55", "fontWeight": "400" }],
+            "headline-lg": ["32px", { "lineHeight": "1.25", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "label-sm": ["12px", { "lineHeight": "1", "fontWeight": "600" }]
+          }
+        },
+      },
+    }
+  </script>
+</head>
+<body class="bg-background text-on-background">
+<!-- Side Navigation Shell -->
+<aside class="flex flex-col h-screen py-md px-sm border-r border-outline-variant dark:border-outline bg-surface-container-low dark:bg-surface-container-lowest fixed left-0 top-0 w-64 z-50">
+<div class="px-md mb-xl">
+<h1 class="text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed">OneAIAssist</h1>
+<p class="text-label-sm text-on-surface-variant">Tenant Admin</p>
+</div>
+<nav class="flex-1 space-y-xs overflow-y-auto">
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant hover:bg-secondary-container dark:hover:bg-on-secondary-fixed-variant transition-colors group" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant hover:bg-secondary-container dark:hover:bg-on-secondary-fixed-variant transition-colors group" href="#">
+<span class="material-symbols-outlined">inbox</span>
+<span class="font-label-md text-label-md">Inbox</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant hover:bg-secondary-container dark:hover:bg-on-secondary-fixed-variant transition-colors group" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-label-md text-label-md">Templates</span>
+</a>
+<!-- Active Tab: Leads -->
+<a class="flex items-center gap-md px-md py-sm rounded-lg bg-secondary-container text-primary dark:text-primary-fixed-dim font-bold transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">group</span>
+<span class="font-label-md text-label-md">Leads</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant hover:bg-secondary-container dark:hover:bg-on-secondary-fixed-variant transition-colors group" href="#">
+<span class="material-symbols-outlined">person_search</span>
+<span class="font-label-md text-label-md">Customers</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant hover:bg-secondary-container dark:hover:bg-on-secondary-fixed-variant transition-colors group" href="#">
+<span class="material-symbols-outlined">campaign</span>
+<span class="font-label-md text-label-md">Broadcast</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant hover:bg-secondary-container dark:hover:bg-on-secondary-fixed-variant transition-colors group" href="#">
+<span class="material-symbols-outlined">auto_mode</span>
+<span class="font-label-md text-label-md">Sequences</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant hover:bg-secondary-container dark:hover:bg-on-secondary-fixed-variant transition-colors group" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</nav>
+<div class="mt-auto px-md py-md border-t border-outline-variant flex items-center gap-md">
+<img class="w-10 h-10 rounded-full object-cover" data-alt="A sharp, professional headshot of a corporate administrator in a modern office, wearing a dark blazer, set against a blurred background of a high-tech coworking space with glass partitions and soft blue ambient lighting. High-end business aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAaVUX3KewSA62sM5Po6HztrDCAv1DGZZYihLWDgingbb5uGnyN2cuXwB9ycKvh4oNO2j_2O3Q_n93BXdE02UW4NOz2TGdiTObbr8opFKr30hNMFAVFdIrlNhsHWT8I9jeGsi7uy3ynCxJBjDl1enR1a2NoqntntxU7TXwQR_TKiQFmetJ0745Ujjpo5qoBIOMP6yRgg7fyoVdKHGA6gMyAudxzRJiGq0gsOzGgnWSAOIiTB1DjwzUlzJ1jCE5qN_UoW5C2rLMfN1ks">
+<div>
+<p class="font-label-md text-on-surface font-bold">Admin User</p>
+<p class="text-xs text-on-surface-variant">Sign out</p>
+</div>
+</div>
+</aside>
+<!-- Top App Bar -->
+<header class="fixed top-0 right-0 left-64 h-16 bg-surface dark:bg-surface-dim shadow-sm flex items-center justify-between px-margin-desktop z-40">
+<div class="flex items-center gap-lg">
+<h2 class="font-headline-md text-headline-md text-primary dark:text-primary-fixed-dim">Lead Pipeline</h2>
+<!-- View Toggle -->
+<div class="flex bg-surface-container rounded-lg p-xs">
+<button class="px-md py-1 bg-white shadow-sm rounded-md text-label-md font-bold text-primary flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">view_kanban</span>
+          Kanban
+        </button>
+<button class="px-md py-1 text-on-surface-variant hover:bg-surface-container-highest transition-colors rounded-md text-label-md flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">list</span>
+          List
+        </button>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<button class="px-md py-sm text-secondary font-label-md hover:bg-surface-container-highest transition-all rounded-lg flex items-center gap-xs">
+<span class="material-symbols-outlined">contact_support</span>
+        Support
+      </button>
+<button class="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-md shadow-md hover:brightness-110 active:scale-95 transition-transform flex items-center gap-xs">
+<span class="material-symbols-outlined">add</span>
+        Add Lead
+      </button>
+<div class="h-8 w-px bg-outline-variant mx-xs"></div>
+<button class="p-xs text-on-surface-variant hover:bg-surface-container-highest rounded-full transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="p-xs text-on-surface-variant hover:bg-surface-container-highest rounded-full transition-colors">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</div>
+</header>
+<!-- Filter Bar -->
+<div class="fixed top-16 right-0 left-64 bg-surface dark:bg-surface-dim px-margin-desktop py-md border-b border-outline-variant z-30">
+<div class="flex flex-wrap items-center gap-md">
+<!-- Agent Dropdown -->
+<div class="relative min-w-[160px]">
+<label class="block text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-1">Agent</label>
+<select class="w-full bg-white border border-outline-variant rounded-lg px-md py-xs text-body-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none appearance-none">
+<option>All Agents</option>
+<option>Sarah Miller</option>
+<option>James Wilson</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 bottom-1.5 pointer-events-none text-on-surface-variant">expand_more</span>
+</div>
+<!-- Source Dropdown -->
+<div class="relative min-w-[160px]">
+<label class="block text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-1">Source</label>
+<select class="w-full bg-white border border-outline-variant rounded-lg px-md py-xs text-body-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none appearance-none">
+<option>All Sources</option>
+<option>WhatsApp</option>
+<option>Organic Search</option>
+<option>Paid Ads</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 bottom-1.5 pointer-events-none text-on-surface-variant">expand_more</span>
+</div>
+<!-- Date Range -->
+<div class="relative min-w-[200px]">
+<label class="block text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-1">Date Range</label>
+<div class="flex items-center gap-xs w-full bg-white border border-outline-variant rounded-lg px-md py-xs text-body-sm">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">calendar_today</span>
+<span>Oct 1 - Oct 31, 2023</span>
+</div>
+</div>
+<!-- Search -->
+<div class="ml-auto relative min-w-[240px]">
+<label class="block text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-1">Search Pipeline</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full bg-white border border-outline-variant rounded-lg pl-10 pr-md py-xs text-body-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none" placeholder="Lead name, email, or value..." type="text">
+</div>
+</div>
+</div>
+</div>
+<!-- Main Content: Kanban Board -->
+<main class="ml-64 pt-44 pb-20 px-margin-desktop overflow-x-auto custom-scrollbar h-screen bg-surface-container-low">
+<div class="flex gap-lg min-h-full pb-8">
+<!-- 1. New Lead -->
+<section class="kanban-column flex flex-col gap-md">
+<div class="flex items-center justify-between px-xs">
+<div class="flex items-center gap-xs">
+<h3 class="font-label-md text-label-md text-on-surface font-bold">New Lead</h3>
+<span class="bg-surface-variant text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">12</span>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">more_vert</button>
+</div>
+<div class="flex flex-col gap-md">
+<!-- Card Example -->
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group">
+<div class="flex justify-between items-start mb-xs">
+<span class="inline-block px-sm py-[2px] bg-secondary-container text-on-secondary-fixed-variant text-[10px] font-bold rounded-full">WhatsApp Broadcast</span>
+<span class="text-on-surface-variant font-bold text-label-sm">$1,200</span>
+</div>
+<h4 class="font-body-md text-on-surface font-bold group-hover:text-primary transition-colors">Sarah Jenkins</h4>
+<div class="flex items-center gap-xs text-on-surface-variant text-[12px] mt-xs">
+<span class="material-symbols-outlined text-[14px]">call</span>
+              +1 555-0123
+            </div>
+<div class="mt-md pt-md border-t border-outline-variant flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant italic">3 days in stage</span>
+<img class="w-6 h-6 rounded-full border border-white" data-alt="A miniature professional avatar of a young woman with glasses and professional attire, isolated on a soft blue circle background. Modern corporate photography style for a B2B app interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC1nATQ7Tgbf65lctKIFKENccyISE9Bqb3ynom_aBq5_JRJiWjLXXgTCYehlfy8FIMFcKFgctYRTzH-DmMi4misTsZi116Mgus_6_cOhhRMv6f9tqwi2V9DPxRSEGNb3nPFdpIBkaq9ERZdhP3enW3x28cCUVHYfs7qCmtVm6fnNq79Xznskx2PK3iljHGoK8zck5_Prj9pli-5hb9iNIZBl1KeScdtVRr6PmSZh_CtgyZudvLRCegLLBUM8U-1s4fA-EPZJMk79OE7">
+</div>
+</div>
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-xs">
+<span class="inline-block px-sm py-[2px] bg-tertiary-container/10 text-tertiary text-[10px] font-bold rounded-full">Organic Search</span>
+<span class="text-on-surface-variant font-bold text-label-sm">$850</span>
+</div>
+<h4 class="font-body-md text-on-surface font-bold">Marcus Holloway</h4>
+<div class="flex items-center gap-xs text-on-surface-variant text-[12px] mt-xs">
+<span class="material-symbols-outlined text-[14px]">call</span>
+              +1 555-9821
+            </div>
+<div class="mt-md pt-md border-t border-outline-variant flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant italic">1 day in stage</span>
+<img class="w-6 h-6 rounded-full border border-white" data-alt="A miniature professional avatar of a man with a beard and a crisp white shirt, clean lighting, set in a circular frame with a subtle gradient background. Professional corporate UI headshot." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCz9ih1DQ0X2yMw8DeGtF8DhGyPCRC1DFpddAhwUfvtkDJHTyUvbcBACCpKowFZ78Q0Mf-TpdsaofUFLx2-nSJDzMZBzI2Qajh_-p5Wr4g50NB17Kb1mxcxCyBk55nK9Svpwh9cB5Y4KF-pyF_l3PpOGxCcFbzd_yexU0KX_WNO0Wq8Dpr5R1FUrQlIT8nzN68aQKUEFS3W521H21fUWrzGh7iQNvTyRFoOHXlBgeRBkmQ0-dhetTzlZKCwQmYyc4oV4q6FjTfxf0I2">
+</div>
+</div>
+</div>
+</section>
+<!-- 2. Intake In Progress -->
+<section class="kanban-column flex flex-col gap-md">
+<div class="flex items-center justify-between px-xs">
+<div class="flex items-center gap-xs">
+<h3 class="font-label-md text-label-md text-on-surface font-bold">Intake In Progress</h3>
+<span class="bg-surface-variant text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">8</span>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant">more_vert</button>
+</div>
+<div class="flex flex-col gap-md">
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="flex justify-between items-start mb-xs">
+<span class="inline-block px-sm py-[2px] bg-secondary-container text-on-secondary-fixed-variant text-[10px] font-bold rounded-full">Referral</span>
+<span class="text-on-surface-variant font-bold text-label-sm">$4,500</span>
+</div>
+<h4 class="font-body-md text-on-surface font-bold">TechSolutions Inc.</h4>
+<div class="flex items-center gap-xs text-on-surface-variant text-[12px] mt-xs">
+<span class="material-symbols-outlined text-[14px]">call</span>
+              +1 212-444-0192
+            </div>
+<div class="mt-md pt-md border-t border-outline-variant flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant italic">5 days in stage</span>
+<img class="w-6 h-6 rounded-full border border-white" data-alt="A professional business headshot of a mature woman in a gray suit, neutral studio background, circular crop, sharp focus on eyes. High-end B2B software avatar aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfEqzhqsT-2vUqaGDz511nZZN9Lqblyv1YUahtPU5uLRRHZM5qZ0VbouTnM1uORj8tU8oXHK8bPYSvyB2HB-DvvIiPSJmfv0Hf-0NWEYH1KorR-o-aGO5ny9X5w49NEua6e1m6bZDpvi3BP7OngHjPSLfijhNPLFsE8mngzVUt799MqntHvc2sDgJjQslHuZ1u-lA7f8E6lOYtf0vHbLOCy5PzyL8TUoEQNxyiJvKe9IHkcs8qrrEuAXz4YMugfSdNmNeTO32e4it1">
+</div>
+</div>
+</div>
+</section>
+<!-- 3. Qualified -->
+<section class="kanban-column flex flex-col gap-md">
+<div class="flex items-center justify-between px-xs">
+<div class="flex items-center gap-xs">
+<h3 class="font-label-md text-label-md text-on-surface font-bold">Qualified</h3>
+<span class="bg-surface-variant text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">5</span>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant">more_vert</button>
+</div>
+<div class="flex flex-col gap-md">
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="flex justify-between items-start mb-xs">
+<span class="inline-block px-sm py-[2px] bg-secondary-container text-on-secondary-fixed-variant text-[10px] font-bold rounded-full">WhatsApp Broadcast</span>
+<span class="text-on-surface-variant font-bold text-label-sm">$12,400</span>
+</div>
+<h4 class="font-body-md text-on-surface font-bold">Elena Rodriguez</h4>
+<div class="flex items-center gap-xs text-on-surface-variant text-[12px] mt-xs">
+<span class="material-symbols-outlined text-[14px]">call</span>
+              +1 305-555-0821
+            </div>
+<div class="mt-md pt-md border-t border-outline-variant flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant italic">12 days in stage</span>
+<img class="w-6 h-6 rounded-full border border-white" data-alt="Corporate headshot of a friendly man with blonde hair and a polo shirt, clean lighting, minimalist background, circular avatar for professional dashboard." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC541OfKNGtnLQwjAEov3iWzmwAmdAf5qytliWRieWrHirqfYbJW2XyKbmOOWXwuW3461Ot68t1UUmPOgJtoDFNjcAnnR2PODoUgLqm3S4j7YLYgYxG1_DTuiky-lUMYcEBPgQdRwUsFt4oGQj3YFDL2IFy4za8h5DaNOX5MdUkiuj_pldgDxScElNy-_eEo_docHYT8ArDeqlTYZOl_ue6fhAHY4A1PGnpIge9CybQfnHqxVVl6cLWSeeHULpZor3JlAyiBKedP1_s">
+</div>
+</div>
+</div>
+</section>
+<!-- 4. Quoted -->
+<section class="kanban-column flex flex-col gap-md">
+<div class="flex items-center justify-between px-xs">
+<div class="flex items-center gap-xs">
+<h3 class="font-label-md text-label-md text-on-surface font-bold">Quoted/Proposal Sent</h3>
+<span class="bg-surface-variant text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">14</span>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant">more_vert</button>
+</div>
+<div class="flex flex-col gap-md">
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="flex justify-between items-start mb-xs">
+<span class="inline-block px-sm py-[2px] bg-primary/10 text-primary text-[10px] font-bold rounded-full">Paid Search</span>
+<span class="text-on-surface-variant font-bold text-label-sm">$22,000</span>
+</div>
+<h4 class="font-body-md text-on-surface font-bold">Global Logistics Ltd</h4>
+<div class="flex items-center gap-xs text-on-surface-variant text-[12px] mt-xs">
+<span class="material-symbols-outlined text-[14px]">call</span>
+              +1 800-921-2233
+            </div>
+<div class="mt-md pt-md border-t border-outline-variant flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant italic">2 days in stage</span>
+<img class="w-6 h-6 rounded-full border border-white" data-alt="Professional avatar of a person of color with curly hair, bright smile, wearing business casual attire. High-quality lighting, professional background, circular UI element." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCigRMBTx5xFLh1B8e4zo0JjbgMl5sahfxagGP4gINrjqNVynhbIz90vUC8wKYC8X6y0AwwWSdFDWaj_bCUEzCjVstsb6n9QYmIuba2sWKFMQW-Md1rQTHhiKEaC-siV6OL3GoXznMa9-BCSn6HFwWTulaDYmFavM-2WNi2AWrl-RGJWeB9SSJVWxzB9xYKk_SC11c9PZYmjPTEXel2L6A5hu-CABJEfq35TlXZQnX293mc_jTfM2J52hzftIOgFPw_4zphn3l8qOl4">
+</div>
+</div>
+</div>
+</section>
+<!-- 5. Negotiation -->
+<section class="kanban-column flex flex-col gap-md">
+<div class="flex items-center justify-between px-xs">
+<div class="flex items-center gap-xs">
+<h3 class="font-label-md text-label-md text-on-surface font-bold">Negotiation</h3>
+<span class="bg-surface-variant text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">3</span>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant">more_vert</button>
+</div>
+<div class="flex flex-col gap-md">
+<div class="bg-white p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="flex justify-between items-start mb-xs">
+<span class="inline-block px-sm py-[2px] bg-secondary-container text-on-secondary-fixed-variant text-[10px] font-bold rounded-full">Direct Outreach</span>
+<span class="text-on-surface-variant font-bold text-label-sm">$35,000</span>
+</div>
+<h4 class="font-body-md text-on-surface font-bold">Azure Cloud Services</h4>
+<div class="flex items-center gap-xs text-on-surface-variant text-[12px] mt-xs">
+<span class="material-symbols-outlined text-[14px]">call</span>
+              +1 415-555-1212
+            </div>
+<div class="mt-md pt-md border-t border-outline-variant flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant italic">18 days in stage</span>
+<img class="w-6 h-6 rounded-full border border-white" data-alt="Detailed professional headshot of a male executive in a navy suit, looking confident. Bright lighting, clean blur background, B2B software avatar profile." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZUIKVbkry9Abnoh1qha4XiyYng-RrPKyUJbn2btgFuJ1R_DHhpa6sgigEksHiSQESZm_yDQTOHIJ_-yCoT2TAkqQk0nmBlLCQJ0GuA-at0K781hc9kAOV46ooy-emPWSUS1fnbUv4I_AJ3yetrZBmUHO91d9H6x_p02xtF_50DeKf3_QD8wDx8UM7d6qhm-D9anCX0XrKgE2JcUnzWOouSYgcaeAYHX_IIxD4l4j4wMJiSrE5ba_49BqwIoMct4FvGqiY4YUKukpM">
+</div>
+</div>
+</div>
+</section>
+<!-- 6. Won (Green Left Border) -->
+<section class="kanban-column flex flex-col gap-md">
+<div class="flex items-center justify-between px-xs">
+<div class="flex items-center gap-xs">
+<h3 class="font-label-md text-label-md text-on-surface font-bold">Won</h3>
+<span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">22</span>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant">more_vert</button>
+</div>
+<div class="flex flex-col gap-md">
+<div class="bg-white p-md rounded-xl border border-outline-variant border-l-4 border-l-emerald-500 shadow-sm opacity-90">
+<div class="flex justify-between items-start mb-xs">
+<span class="inline-block px-sm py-[2px] bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-full">Completed Deal</span>
+<span class="text-on-surface-variant font-bold text-label-sm">$9,250</span>
+</div>
+<h4 class="font-body-md text-on-surface font-bold">Summit Marketing</h4>
+<div class="flex items-center gap-xs text-on-surface-variant text-[12px] mt-xs">
+<span class="material-symbols-outlined text-[14px]">call</span>
+              +1 312-555-7788
+            </div>
+<div class="mt-md pt-md border-t border-outline-variant flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant italic">Won 2 days ago</span>
+<img class="w-6 h-6 rounded-full border border-white" data-alt="Female professional portrait, sleek modern look, natural lighting in a bright office space. High-resolution avatar for a corporate dashboard user interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsBgawiOOeRKl82wHD91K-1ekmNvjSOKq61dbdzvcvM-CN-NwY5UA1OHc6fgTw5DaLuSw3GwJZd_-7A-X9Y9AS0GTzY2DlxjhtIQQQzDUTsXPYsG36DdyYq8V0N-Y7lUdLn8S6tbqcIALWtnLKGpR7CbRwvZTeJeke8KEhbva6TCzOXBOQMRi6To-hJ5zJ-nI4JbW2JEAaM-rPFwWOWJW4jOrxVHen1p_mYF4cLzGGWfGshLxB2Z2mcxRVhWcc-qFeWp1_8j8X05nT">
+</div>
+</div>
+</div>
+</section>
+<!-- 7. Lost (Grayed Out) -->
+<section class="kanban-column flex flex-col gap-md">
+<div class="flex items-center justify-between px-xs">
+<div class="flex items-center gap-xs">
+<h3 class="font-label-md text-label-md text-on-surface-variant font-bold">Lost</h3>
+<span class="bg-outline-variant text-on-surface-variant text-[10px] font-bold px-1.5 py-0.5 rounded-full">45</span>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant">more_vert</button>
+</div>
+<div class="flex flex-col gap-md">
+<div class="bg-surface-container-low p-md rounded-xl border border-outline-variant shadow-none grayscale opacity-60">
+<div class="flex justify-between items-start mb-xs">
+<span class="inline-block px-sm py-[2px] bg-outline-variant/30 text-on-surface-variant text-[10px] font-bold rounded-full">Budget Issues</span>
+<span class="text-on-surface-variant font-bold text-label-sm">$2,100</span>
+</div>
+<h4 class="font-body-md text-on-surface-variant font-bold">Creative Co.</h4>
+<div class="flex items-center gap-xs text-on-surface-variant text-[12px] mt-xs">
+<span class="material-symbols-outlined text-[14px]">call</span>
+              +1 503-555-1122
+            </div>
+<div class="mt-md pt-md border-t border-outline-variant flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant italic">Lost 1 week ago</span>
+<img class="w-6 h-6 rounded-full border border-white grayscale" data-alt="A minimalist professional profile picture of a man with spectacles, looking away, cool lighting. Gray and blue tones to match a professional UI design system." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDI0Fc3abuhxwl5NiJRjd-Prtmunq_dLfmBzLOG61wjz0_WF5zxgem6icg7vToeoDEYFI6qf8Pj9nRx08Lt06PXqIiUmH12uDSB3X5fKM1cdPtakmqU_nTuNZSYnQGRad0rhwaqGJvaK_zrk7q-XhBMeuJa6QWstXAXIMve99Ci2v3atSRbD0K7IgsrU3hVCNJjlGlArxQemn1Bx-UfE1nm1hfmvAFyeuPKglrKY768xDkwxOlBGLGk9uzRWm9c0XWzUxXIMgfXr1rV">
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Sticky Footer Bar -->
+<footer class="fixed bottom-0 right-0 left-64 h-14 bg-white border-t border-outline-variant px-margin-desktop flex items-center justify-between z-40 shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
+<div class="flex items-center gap-xl">
+<div class="flex flex-col">
+<span class="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Pipeline Stats</span>
+<div class="flex gap-lg items-center">
+<p class="text-body-md">Total Pipeline Value: <span class="font-bold text-primary">$84,200</span></p>
+<div class="h-4 w-px bg-outline-variant"></div>
+<p class="text-body-md">Active Leads: <span class="font-bold text-on-surface">92</span></p>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<button class="flex items-center gap-xs text-label-md text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">download</span>
+        Export CSV
+      </button>
+<button class="flex items-center gap-xs text-label-md text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">analytics</span>
+        View Analytics
+      </button>
+</div>
+</footer>
+<script>
+    // Lightweight interaction scripts
+    document.querySelectorAll('.kanban-column div > div').forEach(card => {
+      card.addEventListener('mouseenter', () => {
+        card.style.transform = 'translateY(-2px)';
+        card.style.transition = 'transform 0.2s ease-out, box-shadow 0.2s ease-out';
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = 'translateY(0px)';
+      });
+    });
+
+    // Handle horizontal scroll with mouse wheel (optional utility)
+    const scrollContainer = document.querySelector('main');
+    scrollContainer.addEventListener('wheel', (evt) => {
+      if (evt.deltaY !== 0) {
+        evt.preventDefault();
+        scrollContainer.scrollLeft += evt.deltaY;
+      }
+    });
+  </script>
+</body></html>

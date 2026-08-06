@@ -1,0 +1,735 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+enum Role {
+  PLATFORM_OWNER
+  ADMIN
+  MANAGER
+  AGENT
+  VIEWER
+}
+
+enum AIProvider {
+  OPENAI
+  ANTHROPIC
+  GEMINI
+  OTHER
+}
+
+enum Channel {
+  WHATSAPP
+  INSTAGRAM
+  FACEBOOK
+  WEBCHAT
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+  PENDING
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum SenderType {
+  CUSTOMER
+  BOT
+  AGENT
+}
+
+enum LeadStatus {
+  NEW
+  QUALIFIED
+  APPLICATION_CAPTURED
+  HANDED_OFF
+  NEGOTIATION
+  CONVERTED
+  LOST
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  CONFIRMED
+}
+
+enum PolicyStatus {
+  ACTIVE
+  LAPSED
+  CANCELLED
+}
+
+enum CampaignStatus {
+  DRAFT
+  QUEUED
+  SENDING
+  COMPLETED
+  FAILED
+}
+
+enum BroadcastJobStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  SKIPPED_OPTED_OUT
+}
+
+enum ReminderType {
+  RENEWAL
+  CROSS_SELL
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  DISMISSED
+}
+
+enum WhatsAppNumberStatus {
+  CONNECTED
+  DISCONNECTED
+  QR_PENDING
+}
+
+model Tenant {
+  id                 String   @id @default(cuid())
+  name               String
+  slug               String   @unique
+  status             String   @default("ACTIVE")
+  isDraft            Boolean  @default(false)
+  subscriptionPlan   String
+  subscriptionStatus String
+  createdAt          DateTime @default(now())
+
+  // Visual Branding & Landing Page fields
+  logoUrl            String?
+  primaryColor       String?  @default("#004ac6")
+  secondaryColor     String?  @default("#737686")
+  heroTagline        String?
+  heroDescription    String?
+  trustBadges        Json?    // Array of { icon: string, text: string }
+  contactEmail       String?
+  contactPhone       String?
+  businessHours      String?
+  socialLinks        Json?    // Array of { platform: string, url: string }
+
+  // Relations
+  users                User[]
+  tenantAIConfig       TenantAIConfig?
+  customers            Customer[]
+  customerChannels     CustomerChannel[]
+  conversations        Conversation[]
+  messages             Message[]
+  leads                Lead[]
+  applications         Application[]
+  policies             Policy[]
+  policyCatalogItems   PolicyCatalogItem[]
+  policyDocumentChunks PolicyDocumentChunk[]
+  broadcastCampaigns   BroadcastCampaign[]
+  broadcastJobs        BroadcastJob[]
+  reminderJobs         ReminderJob[]
+  whatsAppNumber       WhatsAppNumber?
+  templates            Template[]
+  auditLogs            AuditLog[]
+  botConfig            BotConfig?
+  tenantAnnouncements  TenantAnnouncement[]
+  tokenUsageLogs       TokenUsageLog[]
+  onboardingProgress   TenantOnboardingProgress?
+  intakeFlow           IntakeFlow?
+  customerNotes        CustomerNote[]
+  escalationLogs       EscalationLog[]
+  marketingCampaigns   MarketingCampaign[]
+  platformConnections  PlatformConnection[]
+}
+
+model BotConfig {
+  id            String   @id @default(cuid())
+  tenantId      String   @unique
+  name          String
+  greetingMessage String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model User {
+  id                String   @id @default(cuid())
+  tenantId          String?
+  email             String   @unique
+  hashedPassword    String
+  role              Role
+  totpSecret        String?
+  twoFactorEnabled  Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  // Relations
+  tenant        Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  leads         Lead[]
+  policies      Policy[]
+  auditLogs     AuditLog[]
+  customerNotes CustomerNote[]
+
+  @@index([tenantId])
+}
+
+model TenantAIConfig {
+  id              String     @id @default(cuid())
+  tenantId        String     @unique
+  provider        AIProvider
+  encryptedApiKey String
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model Customer {
+  id             String    @id @default(cuid())
+  tenantId       String
+  displayName    String
+  primaryPhone   String // Encrypted, verified via OTP (canonical key)
+  activePolicyId String? // optional foreign key to Policy
+  activePolicy   Policy? @relation("ActivePolicy", fields: [activePolicyId], references: [id])
+  tags           String[]  @default([])
+  location       String?
+
+  otpVerified    Boolean   @default(false)
+  otpCode        String?
+  email          String?
+  optedIn        Boolean   @default(false)
+  optedInAt      DateTime?
+  optedOutAt     DateTime?
+  consentIp      String?
+  consentTimestamp DateTime?
+  createdAt      DateTime  @default(now())
+
+  // Relations
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerChannels CustomerChannel[]
+  conversations    Conversation[]
+  leads            Lead[]
+  applications     Application[]
+  policies         Policy[]
+  broadcastJobs    BroadcastJob[]
+  notes            CustomerNote[]
+
+  @@index([tenantId])
+  @@index([primaryPhone])
+}
+
+model CustomerChannel {
+  id                String  @id @default(cuid())
+  tenantId          String
+  customerId        String
+  channel           Channel
+  channelIdentifier String
+  channelMetadata   Json
+
+  // Relations
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([customerId])
+}
+
+model Conversation {
+  id               String             @id @default(cuid())
+  tenantId         String
+  customerId       String
+  channel          Channel
+  status           ConversationStatus @default(OPEN)
+  assignedAgentId  String?
+  needsEscalation  Boolean            @default(false)
+  escalationReason String?
+  lastMessageAt    DateTime           @default(now())
+  createdAt        DateTime           @default(now())
+
+  // Relations
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedAgent User?     @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  messages      Message[]
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([assignedAgentId])
+}
+
+model Message {
+  id               String           @id @default(cuid())
+  tenantId         String
+  conversationId   String
+  direction        MessageDirection
+  senderType       SenderType
+  content          String           @db.Text
+  mediaUrl         String?
+  channel          Channel
+  channelMessageId String?
+  createdAt        DateTime         @default(now())
+
+  // Relations
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([conversationId])
+}
+
+model Lead {
+  id                     String     @id @default(cuid())
+  tenantId               String
+  customerId             String
+  status                 LeadStatus @default(NEW)
+  lostReason             String?
+  intakeAnswers          Json?
+  source                 String
+  campaignId             String?
+  intakeAge              Int?
+  intakeState            String?
+  intakeHealthConditions Json?
+  intakeBudgetMin        Int? // cents
+  intakeBudgetMax        Int? // cents
+  intakeFamilySize       Int?
+  recommendedPolicyIds   String[]
+  selectedPolicyId       String?
+  assignedAgentId        String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  // Relations
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedAgent User?         @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  applications  Application[]
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([assignedAgentId])
+}
+
+model Application {
+  id              String            @id @default(cuid())
+  tenantId        String
+  leadId          String
+  customerId      String
+  applicationData String            @db.Text // Encrypted (PII)
+  capturedAt      DateTime          @default(now())
+  status          ApplicationStatus @default(DRAFT)
+
+  // Relations
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead     Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  policy   Policy?
+
+  @@index([tenantId])
+  @@index([leadId])
+  @@index([customerId])
+}
+
+model Policy {
+  id                String       @id @default(cuid())
+  tenantId          String
+  customerId        String
+  applicationId     String?      @unique
+  policyCatalogId   String
+  policyNumber      String
+  effectiveDate     DateTime
+  expiryDate        DateTime
+  status            PolicyStatus @default(ACTIVE)
+  confirmedByUserId String
+  createdAt         DateTime     @default(now())
+
+  // Relations
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer        Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  application     Application?        @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  policyCatalog   PolicyCatalogItem   @relation(fields: [policyCatalogId], references: [id])
+  confirmedByUser User                @relation(fields: [confirmedByUserId], references: [id])
+  reminderJobs    ReminderJob[]
+  activeCustomers Customer[] @relation("ActivePolicy")
+  documentChunks  PolicyDocumentChunk[]
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([policyCatalogId])
+  @@index([confirmedByUserId])
+}
+
+model PolicyCatalogItem {
+  id               String   @id @default(cuid())
+  tenantId         String
+  policyId         String // internal unique code
+  name             String
+  insurerName      String
+  states           String[]
+  premiumMin       Int // cents
+  premiumMax       Int // cents
+  sumInsured       Int // cents
+  active           Boolean  @default(true)
+  extractedSummary String   @db.Text
+  pdfUrl           String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  policies       Policy[]
+  documentChunks PolicyDocumentChunk[]
+
+  @@index([tenantId])
+  @@index([policyId])
+}
+
+model PolicyDocumentChunk {
+  id               String   @id @default(cuid())
+  tenantId         String
+  policyCatalogId  String?
+  policyId         String?
+  chunkText        String   @db.Text
+  pageNumber       Int
+  pineconeVectorId String
+  createdAt        DateTime @default(now())
+
+  // Relations
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  policyCatalog PolicyCatalogItem? @relation(fields: [policyCatalogId], references: [id], onDelete: Cascade)
+  policy        Policy?            @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([policyCatalogId])
+  @@index([policyId])
+}
+
+model BroadcastCampaign {
+  id              String         @id @default(cuid())
+  tenantId        String
+  name            String
+  messageTemplate String         @default("") @db.Text // keep for compatibility
+  templateId      String?
+  recipientFilter Json?
+  scheduledAt     DateTime?
+  status          CampaignStatus @default(DRAFT)
+  sent            Int            @default(0)
+  delivered       Int            @default(0)
+  read            Int            @default(0)
+  replied         Int            @default(0)
+  converted       Int            @default(0)
+  failed          Int            @default(0)
+  optedOut        Int            @default(0)
+  cost            Float          @default(0.0)
+  createdAt       DateTime       @default(now())
+
+  // Relations
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template      Template?      @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  broadcastJobs BroadcastJob[]
+
+  @@index([tenantId])
+  @@index([templateId])
+}
+
+model BroadcastJob {
+  id           String             @id @default(cuid())
+  tenantId     String
+  campaignId   String
+  customerId   String
+  status       BroadcastJobStatus @default(PENDING)
+  attempts     Int                @default(0)
+  lastError    String?
+  scheduledFor DateTime
+  processedAt  DateTime?
+
+  // Relations
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign BroadcastCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([customerId])
+  @@index([status, scheduledFor])
+}
+
+model ReminderJob {
+  id           String         @id @default(cuid())
+  tenantId     String
+  policyId     String
+  reminderType ReminderType
+  triggerDate  DateTime
+  status       ReminderStatus @default(PENDING)
+  createdAt    DateTime       @default(now())
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  policy Policy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([policyId])
+}
+
+model WhatsAppNumber {
+  id              String               @id @default(cuid())
+  tenantId        String               @unique
+  sessionData     String               @db.Text // Encrypted credentials
+  status          WhatsAppNumberStatus @default(DISCONNECTED)
+  lastConnectedAt DateTime?
+  phoneNumber     String? // Encrypted
+  qualityRating   String? // green/yellow/red quality indicator
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+enum TemplateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+}
+
+enum TemplateStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Template {
+  id                 String              @id @default(cuid())
+  tenantId           String
+  name               String
+  category           TemplateCategory    @default(MARKETING)
+  language           String              @default("en")
+  body               String              @default("") @db.Text
+  content            String              @default("") @db.Text // keep for backwards compatibility
+  header             String?             @db.Text
+  footer             String?             @db.Text
+  ctaButtons         Json?               // JSON array of CTA buttons: [{ type: 'QUICK_REPLY' | 'URL' | 'PHONE', text: string, url?: string, phoneNumber?: string }]
+  status             TemplateStatus      @default(DRAFT)
+  createdAt          DateTime            @default(now())
+
+  // Relations
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  broadcastCampaigns BroadcastCampaign[]
+
+  @@index([tenantId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  userId    String
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  // Relations
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model TenantAnnouncement {
+  id        String   @id @default(cuid())
+  tenantId  String
+  message   String
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model TokenUsageLog {
+  id           String   @id @default(cuid())
+  tenantId     String
+  inputTokens  Int
+  outputTokens Int
+  cost         Float
+  timestamp    DateTime @default(now())
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model PlanRateLimit {
+  id        String  @id @default(cuid())
+  plan      String  @unique // FREE, STARTUP, GROWTH, ENTERPRISE
+  maxTokens Float
+  hardStop  Boolean @default(true)
+}
+
+model TenantOnboardingProgress {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique
+  accountCreated    Boolean  @default(true)
+  whatsappConnected Boolean  @default(false)
+  botNameSet        Boolean  @default(false)
+  intakeFlowBuilt   Boolean  @default(false)
+  productAdded      Boolean  @default(false)
+  agentInvited      Boolean  @default(false)
+  testMessageSent   Boolean  @default(false)
+  goneLive          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model IntakeFlow {
+  id        String   @id @default(cuid())
+  tenantId  String   @unique
+  questions Json     // JSON array of question nodes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model CustomerNote {
+  id         String   @id @default(cuid())
+  tenantId   String
+  customerId String
+  userId     String
+  content    String   @db.Text
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([userId])
+}
+
+model EscalationLog {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String?
+  customerId     String?
+  userQuestion   String   @db.Text
+  reason         String?
+  triggeredAt    DateTime @default(now())
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([triggeredAt])
+}
+
+enum MarketingCampaignType {
+  ORGANIC
+  PAID
+}
+
+enum MarketingCampaignStatus {
+  DRAFT
+  SCHEDULED
+  PENDING
+  PUBLISHING
+  SUCCESS
+  FAILED
+}
+
+enum CtrPrediction {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum PreFlightAuditVerdict {
+  PASS
+  REVIEW
+  BLOCK
+}
+
+enum SocialPlatform {
+  FACEBOOK
+  INSTAGRAM
+  LINKEDIN
+  YOUTUBE
+  META_ADS
+}
+
+enum PlatformConnectionStatus {
+  CONNECTED
+  NOT_CONNECTED
+}
+
+model MarketingCampaign {
+  id                String                  @id @default(cuid())
+  tenantId          String
+  name              String
+  type              MarketingCampaignType   @default(ORGANIC)
+  platforms         String[]                // e.g. ["facebook", "instagram", "linkedin", "youtube"]
+  mediaUrl          String?
+  caption           String                  @db.Text
+  status            MarketingCampaignStatus @default(DRAFT)
+  scheduledAt       DateTime?
+  publishedAt       DateTime?
+  reach             Int                     @default(0)
+  budget            Float?                  // for paid ads
+  audienceTargeting Json?                   // { ageRange: string, location: string, interests: string[] }
+  complianceScore   Int?                    // 0-100
+  ctrPrediction     CtrPrediction?
+  auditResult       PreFlightAuditVerdict?
+  auditDetails      Json?                   // checklist & recommendations
+  abTestVariantOfId String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  abTestVariantOf MarketingCampaign?  @relation("ABTestVariants", fields: [abTestVariantOfId], references: [id], onDelete: SetNull)
+  abTestVariants  MarketingCampaign[] @relation("ABTestVariants")
+
+  @@index([tenantId])
+  @@index([abTestVariantOfId])
+  @@index([status])
+}
+
+model PlatformConnection {
+  id          String                   @id @default(cuid())
+  tenantId    String
+  platform    SocialPlatform
+  status      PlatformConnectionStatus @default(NOT_CONNECTED)
+  accountName String?
+  accessToken String?                  @db.Text
+  connectedAt DateTime?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@unique([tenantId, platform])
+}
+

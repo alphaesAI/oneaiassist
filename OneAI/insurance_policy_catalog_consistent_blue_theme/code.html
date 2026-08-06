@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OneAIAssist - Find Your Plan</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed": "#001f26",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "surface-container-low": "#f0f3ff",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "surface-tint": "#0053db",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed": "#acedff",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#005e6e",
+                        "on-background": "#111c2d",
+                        "surface-container-highest": "#d8e3fb",
+                        "on-primary-fixed": "#00174b",
+                        "surface-container-high": "#dee8ff",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed": "#dae2fd",
+                        "on-tertiary-container": "#d7f6ff",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-tertiary-fixed-variant": "#004e5c",
+                        "inverse-primary": "#b4c5ff",
+                        "surface-bright": "#f9f9ff",
+                        "on-surface-variant": "#434655",
+                        "on-secondary-container": "#5c647a",
+                        "tertiary-container": "#00788c",
+                        "on-secondary-fixed": "#131b2e",
+                        "primary": "#004ac6",
+                        "surface": "#f9f9ff",
+                        "secondary": "#565e74",
+                        "tertiary-fixed-dim": "#4cd7f6",
+                        "outline": "#737686",
+                        "on-primary-container": "#eeefff",
+                        "on-secondary": "#ffffff",
+                        "on-surface": "#111c2d",
+                        "surface-dim": "#cfdaf2",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container": "#e7eeff",
+                        "outline-variant": "#c3c6d7",
+                        "surface-variant": "#d8e3fb",
+                        "inverse-surface": "#263143",
+                        "background": "#f9f9ff",
+                        "secondary-container": "#dae2fd",
+                        "primary-container": "#2563eb",
+                        "error": "#ba1a1a",
+                        "primary-fixed": "#dbe1ff",
+                        "inverse-on-surface": "#ecf1ff",
+                        "tenant-accent": "#2563eb"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "4px",
+                        "xl": "32px",
+                        "md": "16px",
+                        "3xl": "64px",
+                        "margin-desktop": "32px",
+                        "lg": "24px",
+                        "sm": "8px",
+                        "margin-mobile": "16px",
+                        "gutter": "24px",
+                        "base": "4px",
+                        "2xl": "48px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "display-lg-mobile": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "label-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "display-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "display-lg-mobile": ["36px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "1.55", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "1.25", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-sm": ["12px", {"lineHeight": "1", "fontWeight": "600"}],
+                        "label-md": ["14px", {"lineHeight": "1", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                        "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .policy-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.1);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #2563eb;
+            cursor: pointer;
+            box-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md overflow-x-hidden">
+<!-- TopNavBar -->
+<header class="w-full top-0 sticky bg-surface dark:bg-surface-dim z-50 border-b border-outline-variant dark:border-outline shadow-sm">
+<div class="flex justify-between items-center w-full px-margin-desktop py-md max-w-7xl mx-auto">
+<div class="flex items-center gap-xl">
+<div class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim">
+                OneAIAssist
+            </div>
+<nav class="hidden md:flex items-center gap-lg">
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary transition-colors duration-200 font-body-md text-body-md" href="#">Home</a>
+<a class="text-primary dark:text-primary-fixed-dim border-b-2 border-primary font-bold pb-1 font-body-md text-body-md" href="#">Plans</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary transition-colors duration-200 font-body-md text-body-md" href="#">About</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary transition-colors duration-200 font-body-md text-body-md" href="#">Contact</a>
+</nav>
+</div>
+<div class="flex items-center gap-md">
+<button class="cursor-pointer active:scale-95 transition-transform bg-primary text-white px-lg py-sm rounded-lg font-label-md text-label-md hover:brightness-110 shadow-sm">
+                Chat with us
+            </button>
+</div>
+</div>
+</header>
+<main class="max-w-7xl mx-auto px-margin-desktop py-3xl">
+<!-- Hero/Title Section -->
+<section class="mb-2xl text-center md:text-left">
+<h1 class="font-display-lg text-display-lg text-on-surface mb-md">Find Your Plan</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
+            Tailored insurance solutions designed for your needs. Use the filters below to browse our comprehensive range of high-trust insurance policies.
+        </p>
+</section>
+<!-- Filter Bar -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-lg mb-2xl shadow-sm">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-lg items-end">
+<!-- Category Dropdown -->
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Category</label>
+<select class="w-full bg-surface border border-outline rounded-lg py-sm px-md font-body-sm focus:ring-2 focus:ring-primary outline-none">
+<option>All Policies</option>
+<option>Health Insurance</option>
+<option>Life Coverage</option>
+<option>Dental &amp; Vision</option>
+</select>
+</div>
+<!-- Price Range Slider -->
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant flex justify-between">
+                    Price Range <span class="text-primary font-bold">$0 - $500</span>
+</label>
+<input class="w-full h-2 bg-surface-container-high rounded-lg appearance-none cursor-pointer accent-primary" max="1000" min="0" step="50" type="range"/>
+</div>
+<!-- Coverage Type Checkboxes -->
+<div class="flex flex-col gap-xs">
+<label class="font-label-md text-on-surface-variant">Coverage Type</label>
+<div class="flex gap-md flex-wrap">
+<label class="flex items-center gap-xs font-body-sm cursor-pointer">
+<input class="rounded border-outline text-primary focus:ring-primary" type="checkbox"/> Individual
+                    </label>
+<label class="flex items-center gap-xs font-body-sm cursor-pointer">
+<input class="rounded border-outline text-primary focus:ring-primary" type="checkbox"/> Family
+                    </label>
+<label class="flex items-center gap-xs font-body-sm cursor-pointer">
+<input class="rounded border-outline text-primary focus:ring-primary" type="checkbox"/> Senior
+                    </label>
+</div>
+</div>
+<!-- Compare Toggle -->
+<div class="flex items-center justify-end md:justify-start gap-md py-xs">
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-surface-container-high peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+<span class="ml-3 font-label-md text-on-surface">Compare Mode</span>
+</label>
+</div>
+</div>
+</section>
+<!-- Policy Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-lg">
+<!-- Most Popular Card -->
+<div class="policy-card bg-surface-container-lowest border-2 border-primary rounded-xl p-lg relative transition-all duration-300 flex flex-col justify-between">
+<div class="absolute -top-3 -right-3 bg-primary text-white font-label-sm px-md py-xs rounded-lg shadow-md uppercase tracking-wider">
+                Most Popular
+            </div>
+<div>
+<div class="flex justify-between items-start mb-md">
+<img alt="" class="w-24 h-12 object-cover rounded shadow-sm opacity-90 border border-outline-variant" src="https://lh3.googleusercontent.com/aida/AP1WRLsdq-QyseVUfVemqXf5oG9P7gGJ-rYnc1HAi3IHsP1kFa8jPiRWuo4LHv-Gc7s8kAmWsA2jjuK2QdluKQCymnGJvk2KY7DVPhVMH6RRD68_kx8Npt1kWaMFTomac5-G0pvcC2fFt4RK3Bx7SyVTYmUMy5PZRZTLmRAxUNhJ54UbOybImXOG72jRQ8HwZMG904bm8qKj-ArEtEgYRF9YYvPZI-bjug3RpWc3jggilYyUKQTVgQIyNRrg9CUh"/>
+<div class="text-right">
+<p class="font-label-sm text-on-surface-variant">Starting from</p>
+<h3 class="font-headline-md text-headline-md text-primary">$89/mo</h3>
+</div>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-sm">Gold Comprehensive</h2>
+<p class="font-body-sm text-on-surface-variant mb-md">Premium coverage for those who want total peace of mind and the widest network.</p>
+<ul class="space-y-sm mb-lg">
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        No Deductible for Emergency Visits
+                    </li>
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        Global Travel Assistance Included
+                    </li>
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        Prescription Coverage (Tier 1 &amp; 2)
+                    </li>
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        Annual Dental &amp; Vision Checkups
+                    </li>
+</ul>
+<p class="font-label-sm text-outline mb-lg italic">Eligibility: Available for Individuals &amp; Families</p>
+</div>
+<div class="flex gap-sm mt-auto">
+<button class="flex-1 border border-outline text-on-surface font-label-md py-sm rounded-lg hover:bg-surface-container-low transition-colors">View Details</button>
+<button class="flex-1 bg-primary text-white font-label-md py-sm rounded-lg hover:brightness-110 shadow-sm transition-all active:scale-95">Buy Now</button>
+</div>
+</div>
+<!-- Standard Card 1 -->
+<div class="policy-card bg-surface-container-lowest border border-outline-variant rounded-xl p-lg transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-md">
+<div class="w-12 h-12 bg-primary-container/10 flex items-center justify-center rounded-lg border border-primary/20">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">health_and_safety</span>
+</div>
+<div class="text-right">
+<p class="font-label-sm text-on-surface-variant">Starting from</p>
+<h3 class="font-headline-md text-headline-md text-on-surface">$45/mo</h3>
+</div>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-sm">Silver Care Plus</h2>
+<p class="font-body-sm text-on-surface-variant mb-md">Perfect balance of value and coverage for healthy individuals and young professionals.</p>
+<ul class="space-y-sm mb-lg">
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        Primary Care Co-pay only $15
+                    </li>
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        24/7 Telehealth Access
+                    </li>
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        Mental Health Support Network
+                    </li>
+</ul>
+<p class="font-label-sm text-outline mb-lg italic">Eligibility: Ages 18-65</p>
+</div>
+<div class="flex gap-sm mt-auto">
+<button class="flex-1 border border-outline text-on-surface font-label-md py-sm rounded-lg hover:bg-surface-container-low transition-colors">View Details</button>
+<button class="flex-1 bg-primary text-white font-label-md py-sm rounded-lg hover:brightness-110 shadow-sm transition-all active:scale-95">Buy Now</button>
+</div>
+</div>
+<!-- Standard Card 2 -->
+<div class="policy-card bg-surface-container-lowest border border-outline-variant rounded-xl p-lg transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-md">
+<div class="w-12 h-12 bg-tertiary-container/10 flex items-center justify-center rounded-lg border border-tertiary/20">
+<span class="material-symbols-outlined text-tertiary" style="font-variation-settings: 'FILL' 1;">elderly</span>
+</div>
+<div class="text-right">
+<p class="font-label-sm text-on-surface-variant">Starting from</p>
+<h3 class="font-headline-md text-headline-md text-on-surface">$120/mo</h3>
+</div>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-sm">Senior Prime Gold</h2>
+<p class="font-body-sm text-on-surface-variant mb-md">Specialized geriatric care coordination and comprehensive chronic condition management.</p>
+<ul class="space-y-sm mb-lg">
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        At-home Nurse Visits Monthly
+                    </li>
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        Zero Co-pay Specialist Referrals
+                    </li>
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        Hearing Aid Coverage (Biennial)
+                    </li>
+</ul>
+<p class="font-label-sm text-outline mb-lg italic">Eligibility: Ages 65+</p>
+</div>
+<div class="flex gap-sm mt-auto">
+<button class="flex-1 border border-outline text-on-surface font-label-md py-sm rounded-lg hover:bg-surface-container-low transition-colors">View Details</button>
+<button class="flex-1 bg-primary text-white font-label-md py-sm rounded-lg hover:brightness-110 shadow-sm transition-all active:scale-95">Buy Now</button>
+</div>
+</div>
+<!-- Standard Card 3 (Repeat Pattern) -->
+<div class="policy-card bg-surface-container-lowest border border-outline-variant rounded-xl p-lg transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-md">
+<div class="w-12 h-12 bg-secondary-container/10 flex items-center justify-center rounded-lg border border-secondary/20">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">family_restroom</span>
+</div>
+<div class="text-right">
+<p class="font-label-sm text-on-surface-variant">Starting from</p>
+<h3 class="font-headline-md text-headline-md text-on-surface">$155/mo</h3>
+</div>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-sm">Family Shield Pro</h2>
+<p class="font-body-sm text-on-surface-variant mb-md">Comprehensive protection for the whole household with pediatric specialist access.</p>
+<ul class="space-y-sm mb-lg">
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        Unlimited Pediatric Visits
+                    </li>
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        Vaccination &amp; Preventive Care
+                    </li>
+<li class="flex items-center gap-xs text-body-sm">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        Shared Deductible Benefits
+                    </li>
+</ul>
+<p class="font-label-sm text-outline mb-lg italic">Eligibility: Families (up to 5 members)</p>
+</div>
+<div class="flex gap-sm mt-auto">
+<button class="flex-1 border border-outline text-on-surface font-label-md py-sm rounded-lg hover:bg-surface-container-low transition-colors">View Details</button>
+<button class="flex-1 bg-primary text-white font-label-md py-sm rounded-lg hover:brightness-110 shadow-sm transition-all active:scale-95">Buy Now</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Comparison Tray (Sticky) -->
+<div class="fixed bottom-lg left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-2xl">
+<div class="bg-inverse-surface text-inverse-on-surface rounded-full py-md px-lg shadow-2xl flex items-center justify-between animate-bounce-in">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center font-bold">2</div>
+<span class="font-body-md">plans selected for comparison</span>
+</div>
+<div class="flex items-center gap-md">
+<button class="text-inverse-on-surface hover:text-white transition-colors font-label-md px-md hidden sm:block">Clear</button>
+<button class="bg-primary text-white px-lg py-sm rounded-full font-label-md hover:brightness-110 transition-all flex items-center gap-xs">
+                Compare Now
+                <span class="material-symbols-outlined text-[20px]">compare_arrows</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<footer class="w-full bottom-0 bg-surface-container-lowest dark:bg-on-tertiary-fixed border-t border-outline-variant dark:border-outline">
+<div class="flex flex-col md:flex-row justify-between items-center w-full px-margin-desktop py-xl gap-md max-w-7xl mx-auto">
+<div class="flex flex-col items-center md:items-start gap-xs">
+<div class="font-headline-sm text-headline-sm font-bold text-on-surface dark:text-on-surface">OneAIAssist</div>
+<p class="font-label-md text-label-md text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant">© 2024 OneAIAssist. All rights reserved.</p>
+</div>
+<div class="flex flex-wrap justify-center gap-lg">
+<a class="text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant font-label-md text-label-md hover:text-primary dark:hover:text-primary-fixed-dim transition-colors" href="#">Privacy Policy</a>
+<a class="text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant font-label-md text-label-md hover:text-primary dark:hover:text-primary-fixed-dim transition-colors" href="#">Terms of Service</a>
+<a class="text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant font-label-md text-label-md hover:text-primary dark:hover:text-primary-fixed-dim transition-colors" href="#">Support</a>
+<a class="text-on-secondary-fixed-variant dark:text-on-secondary-fixed-variant font-label-md text-label-md hover:text-primary dark:hover:text-primary-fixed-dim transition-colors" href="#">API Documentation</a>
+</div>
+</div>
+</footer>
+<script>
+    // Micro-interaction for comparison tray
+    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            // Logic to update comparison count could go here
+            console.log('Comparison selection toggled');
+        });
+    });
+</script>
+</body></html>

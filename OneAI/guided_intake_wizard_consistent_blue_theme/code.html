@@ -1,0 +1,255 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Insurance Wizard - Budget Intake</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        /* Custom Slider Styling to match Brand Orange #f97316 */
+        input[type='range']::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            background: #ffffff;
+            border: 2px solid #f97316;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            margin-top: -8px; /* Centers thumb on track */
+        }
+        input[type='range']::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            background: #ffffff;
+            border: 2px solid #f97316;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+        input[type='range']::-webkit-slider-runnable-track {
+            height: 8px;
+            background: #e5eeff;
+            border-radius: 9999px;
+        }
+        input[type='range']::-moz-range-track {
+            height: 8px;
+            background: #e5eeff;
+            border-radius: 9999px;
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface": "#f8f9ff",
+                    "surface-container-high": "#dce9ff",
+                    "error": "#ba1a1a",
+                    "secondary-fixed": "#dae2fd",
+                    "inverse-on-surface": "#eaf1ff",
+                    "inverse-primary": "#ffb690",
+                    "background": "#f8f9ff",
+                    "primary": "#9d4300",
+                    "primary-fixed-dim": "#ffb690",
+                    "secondary": "#565e74",
+                    "on-primary-fixed": "#341100",
+                    "on-tertiary-fixed-variant": "#444749",
+                    "on-surface": "#0b1c30",
+                    "on-background": "#0b1c30",
+                    "on-tertiary-fixed": "#191c1e",
+                    "secondary-container": "#dae2fd",
+                    "error-container": "#ffdad6",
+                    "on-secondary": "#ffffff",
+                    "on-secondary-fixed-variant": "#3f465c",
+                    "tertiary": "#5c5f61",
+                    "outline-variant": "#e0c0b1",
+                    "on-primary-container": "#582200",
+                    "tertiary-container": "#989b9d",
+                    "surface-dim": "#cbdbf5",
+                    "surface-container-low": "#eff4ff",
+                    "tertiary-fixed": "#e0e3e5",
+                    "on-secondary-container": "#5c647a",
+                    "on-primary": "#ffffff",
+                    "on-error-container": "#93000a",
+                    "on-tertiary": "#ffffff",
+                    "secondary-fixed-dim": "#bec6e0",
+                    "surface-container": "#e5eeff",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-fixed": "#131b2e",
+                    "outline": "#8c7164",
+                    "surface-tint": "#9d4300",
+                    "on-surface-variant": "#584237",
+                    "tertiary-fixed-dim": "#c4c7c9",
+                    "on-error": "#ffffff",
+                    "primary-fixed": "#ffdbca",
+                    "on-primary-fixed-variant": "#783200",
+                    "surface-variant": "#d3e4fe",
+                    "on-tertiary-container": "#303335",
+                    "surface-bright": "#f8f9ff",
+                    "primary-container": "#f97316",
+                    "surface-container-highest": "#d3e4fe",
+                    "inverse-surface": "#213145"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "gutter": "1.5rem",
+                    "stack-sm": "0.5rem",
+                    "stack-md": "1.5rem",
+                    "stack-lg": "3rem",
+                    "container-max": "640px"
+            },
+            "fontFamily": {
+                    "display-lg-mobile": ["Inter"],
+                    "label-md": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "label-sm": ["Inter"]
+            },
+            "fontSize": {
+                    "display-lg-mobile": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "label-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+</head>
+<body class="bg-surface font-body-md text-on-surface min-h-screen flex flex-col">
+<!-- Top Navigation Bar -->
+<header class="bg-surface sticky top-0 z-50">
+<div class="flex justify-between items-center px-gutter py-4 w-full max-w-container-max mx-auto">
+<!-- Brand Logo -->
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1; color: #2563EB;">shield_with_heart</span>
+<span class="text-headline-md font-headline-md text-primary" style="color: #2563EB;">Insurance Wizard</span>
+</div>
+<!-- Progress Indicator -->
+<div class="flex flex-col items-end">
+<span class="font-label-md text-label-md text-on-surface-variant">Step 3 of 6</span>
+<div class="w-24 h-1.5 bg-surface-container-high rounded-full mt-1 overflow-hidden">
+<div class="w-1/2 h-full bg-primary-container" style="background-color: #2563EB;"></div>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-grow flex items-center justify-center p-gutter">
+<div class="w-full max-w-[480px] bg-surface-container-lowest rounded-xl p-8 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.05),0px_4px_6px_-2px_rgba(0,0,0,0.02)] transition-all duration-300">
+<!-- Title Section -->
+<div class="mb-stack-lg text-center">
+<h1 class="font-headline-md text-headline-md text-on-surface mb-2">What's your monthly budget for premium?</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Just a rough number is fine</p>
+</div>
+<!-- Input Section -->
+<div class="space-y-stack-lg">
+<!-- Visual Value Display -->
+<div class="flex flex-col items-center">
+<div class="bg-primary-container text-on-primary font-headline-md text-headline-md px-6 py-3 rounded-xl mb-4 shadow-md relative animate-bounce-subtle" id="bubble" style="background-color: #2563EB;">
+                        $<span id="rangeValue">250</span>
+<div class="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 bg-primary-container rotate-45" style="background-color: #2563EB;"></div>
+</div>
+<!-- Slider -->
+<input class="w-full h-2 bg-surface-container-high rounded-lg appearance-none cursor-pointer accent-primary-container" id="budgetSlider" max="1500" min="50" step="10" style="accent-color: #2563EB;" type="range" value="250">
+</div>
+<!-- Manual Input -->
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+<span class="text-on-surface-variant font-body-lg text-body-lg">$</span>
+</div>
+<input class="block w-full pl-8 pr-4 py-4 bg-surface border border-surface-container-high rounded-lg font-body-lg text-body-lg focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all outline-none" id="budgetInput" placeholder="0" type="number" value="250">
+</div>
+<!-- CTA Buttons -->
+<div class="space-y-stack-md pt-4">
+<button class="w-full py-4 bg-primary-container text-on-primary font-label-md text-label-md rounded-lg shadow-lg hover:opacity-90 active:scale-[0.98] transition-all flex justify-center items-center gap-2" style="background-color: #2563EB;">
+                        Continue
+                        <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+<div class="flex flex-col items-center gap-3">
+<a class="inline-flex items-center gap-2 text-on-secondary-fixed-variant transition-colors cursor-pointer font-label-md text-label-md" href="#" onmouseout="this.style.color=''" onmouseover="this.style.color='#2563EB'">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+                            Save &amp; continue later
+                        </a>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Reassurance Strip -->
+<section class="w-full py-4 bg-surface-container-low border-t border-surface-container-high mt-auto">
+<div class="max-w-container-max mx-auto px-gutter flex items-center justify-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">lock</span>
+<p class="font-label-sm text-label-sm">Your information is private and only shared with your licensed agent.</p>
+</div>
+</section>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest dark:bg-inverse-surface py-stack-md">
+<div class="flex flex-col items-center gap-stack-sm w-full max-w-container-max mx-auto px-gutter">
+<div class="flex gap-4 mb-2">
+<a class="font-label-sm text-label-sm text-on-surface-variant transition-colors" href="#">Privacy Policy</a>
+<a class="font-label-sm text-label-sm text-on-surface-variant transition-colors" href="#">Terms of Service</a>
+<a class="font-label-sm text-label-sm text-on-surface-variant transition-colors" href="#">Security FAQ</a>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface-variant">© 2024 Insurance Tenant. Your data is encrypted and secure.</p>
+</div>
+</footer>
+<script>
+        const slider = document.getElementById('budgetSlider');
+        const input = document.getElementById('budgetInput');
+        const display = document.getElementById('rangeValue');
+
+        function updateValues(val) {
+            slider.value = val;
+            input.value = val;
+            display.textContent = val;
+        }
+
+        slider.addEventListener('input', (e) => {
+            updateValues(e.target.value);
+        });
+
+        input.addEventListener('input', (e) => {
+            let val = e.target.value;
+            if (val > 1500) val = 1500;
+            if (val < 0) val = 0;
+            updateValues(val);
+        });
+        
+        // Micro-interaction for the bubble
+        slider.addEventListener('mousedown', () => {
+            document.getElementById('bubble').classList.add('scale-110');
+        });
+        slider.addEventListener('mouseup', () => {
+            document.getElementById('bubble').classList.remove('scale-110');
+        });
+    </script>
+<style>
+        @keyframes bounce-subtle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
+        .animate-bounce-subtle {
+            animation: bounce-subtle 3s ease-in-out infinite;
+        }
+    </style>
+</body></html>

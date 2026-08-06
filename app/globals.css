@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  .theme {
+    --font-heading: var(--font-sans);
+    --font-sans: var(--font-sans);
+  }
+  :root {
+    --background: #f9f9ff;
+    --foreground: #111c2d;
+    --card: #ffffff;
+    --card-foreground: #111c2d;
+    --popover: #ffffff;
+    --popover-foreground: #111c2d;
+    --primary: #004ac6;
+    --primary-foreground: #ffffff;
+    --secondary: #565e74;
+    --secondary-foreground: #ffffff;
+    --muted: #e7eeff;
+    --muted-foreground: #434655;
+    --accent: #005e6e;
+    --accent-foreground: #ffffff;
+    --destructive: #ba1a1a;
+    --destructive-foreground: #ffffff;
+    --border: #c3c6d7;
+    --input: #c3c6d7;
+    --ring: #004ac6;
+    --radius: 0.5rem;
+  }
+  .dark {
+    --background: #121214;
+    --foreground: #f9f9ff;
+    --card: #1a1a1e;
+    --card-foreground: #f9f9ff;
+    --popover: #1a1a1e;
+    --popover-foreground: #f9f9ff;
+    --primary: #2563eb;
+    --primary-foreground: #ffffff;
+    --secondary: #bec6e0;
+    --secondary-foreground: #131b2e;
+    --muted: #2c2f33;
+    --muted-foreground: #c3c6d7;
+    --accent: #4cd7f6;
+    --accent-foreground: #001f26;
+    --destructive: #ba1a1a;
+    --destructive-foreground: #ffffff;
+    --border: #2d3a54;
+    --input: #2d3a54;
+    --ring: #2563eb;
+  }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+
+  .whatsapp-bubble-left::after {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 12px;
+    border-width: 8px 8px 8px 0;
+    border-color: transparent white transparent transparent;
+    border-style: solid;
+  }
+  .whatsapp-bubble-right::after {
+    content: '';
+    position: absolute;
+    right: -8px;
+    top: 12px;
+    border-width: 8px 0 8px 8px;
+    border-color: transparent #dcf8c6 transparent transparent;
+    border-style: solid;
+  }
+  .glass-card {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slideUp {
+    from { transform: translateY(16px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out forwards;
+  }
+  .animate-slide-up {
+    animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+}
