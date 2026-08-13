@@ -32,3 +32,5 @@ next-env.d.ts
 **.node-persist**
 **_IGNORE_**
 # end managed
+
+*.tar

@@ -40,6 +40,24 @@ enum MessageDirection {
   OUTBOUND
 }
 
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  DOCUMENT
+  AUDIO
+  LOCATION
+  OTHER
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
 enum SenderType {
   CUSTOMER
   BOT
@@ -157,6 +175,7 @@ model BotConfig {
   tenantId      String   @unique
   name          String
   greetingMessage String
+  stopKeyword   String?  @default("STOP")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -253,16 +272,17 @@ model CustomerChannel {
 }
 
 model Conversation {
-  id               String             @id @default(cuid())
-  tenantId         String
-  customerId       String
-  channel          Channel
-  status           ConversationStatus @default(OPEN)
-  assignedAgentId  String?
-  needsEscalation  Boolean            @default(false)
-  escalationReason String?
-  lastMessageAt    DateTime           @default(now())
-  createdAt        DateTime           @default(now())
+  id                String             @id @default(cuid())
+  tenantId          String
+  customerId        String
+  channel           Channel
+  status            ConversationStatus @default(OPEN)
+  assignedAgentId   String?
+  needsEscalation   Boolean            @default(false)
+  escalationReason  String?
+  automationEnabled Boolean            @default(true)
+  lastMessageAt     DateTime           @default(now())
+  createdAt         DateTime           @default(now())
 
   // Relations
   tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -276,16 +296,25 @@ model Conversation {
 }
 
 model Message {
-  id               String           @id @default(cuid())
-  tenantId         String
-  conversationId   String
-  direction        MessageDirection
-  senderType       SenderType
-  content          String           @db.Text
-  mediaUrl         String?
-  channel          Channel
-  channelMessageId String?
-  createdAt        DateTime         @default(now())
+  id                String           @id @default(cuid())
+  tenantId          String
+  conversationId    String
+  direction         MessageDirection
+  senderType        SenderType
+  content           String           @db.Text
+  mediaUrl          String?
+  channel           Channel
+  channelMessageId  String?
+  messageType       MessageType      @default(TEXT)
+  status            MessageStatus    @default(SENT)
+  clientMessageId   String?          @unique
+  providerMessageId String?
+  mediaId           String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  createdAt         DateTime         @default(now())
 
   // Relations
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)

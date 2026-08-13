@@ -33,8 +33,8 @@ export async function sendWhatsAppMessage({
 
   // 2. Broadcast Compliance Opt-in Check
   if (campaignId) {
-    if (!customer.optedIn) {
-      console.log(`[Compliance] Skipping broadcast send to customer ${customerId} (optedIn = false).`);
+    if (customer.optedOutAt !== null) {
+      console.log(`[Compliance] Skipping broadcast send to customer ${customerId} (optedOutAt is set).`);
 
       if (broadcastJobId) {
         // Mark the broadcast job as SKIPPED_OPTED_OUT in database

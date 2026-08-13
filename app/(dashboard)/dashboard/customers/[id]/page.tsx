@@ -83,9 +83,9 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   const [noteContent, setNoteContent] = useState('');
   const [whatsappContent, setWhatsappContent] = useState('');
 
-  // Quick Action Dialog toggles
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [isWhatsappModalOpen, setIsWhatsappModalOpen] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletionSuccess, setDeletionSuccess] = useState(false);
 
@@ -116,13 +116,20 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Action failed');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Action failed');
+      }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customer', customerId] });
       setIsWhatsappModalOpen(false);
       setWhatsappContent('');
+      setSendError(null);
+    },
+    onError: (err: Error) => {
+      setSendError(err.message);
     },
   });
 
@@ -467,7 +474,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                   {notes.map((note) => (
                     <div key={note.id} className="bg-white border border-[#c3c6d7] p-4 rounded-2xl shadow-sm space-y-1.5">
                       <div className="flex justify-between items-center text-[10px] font-bold">
-                        <span className="text-[#004ac6]">{note.user.email}</span>
+                        <span className="text-[#004ac6]">{note.user?.email ?? 'Deleted user'}</span>
                         <span className="text-[#737686]">
                           {new Date(note.createdAt).toLocaleDateString()} at {new Date(note.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
@@ -684,9 +691,12 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
           <div className="bg-white border border-[#c3c6d7] rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-4">
             <div className="flex justify-between items-center border-b pb-2">
               <span className="text-xs font-extrabold uppercase tracking-wide text-[#1c1b1f]">Send WhatsApp Message</span>
-              <button onClick={() => setIsWhatsappModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setIsWhatsappModalOpen(false); setSendError(null); }} className="text-slate-400 hover:text-slate-600">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
+            </div>
+            <div className="text-[10px] text-slate-500 font-semibold">
+              Sending to: <span className="font-bold text-[#1c1b1f]">{customer.displayName}</span> (+{customer.primaryPhone})
             </div>
             <textarea
               rows={4}
@@ -695,15 +705,21 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
               onChange={(e) => setWhatsappContent(e.target.value)}
               className="w-full text-xs bg-slate-50 border border-[#c3c6d7] rounded-xl p-3 focus:outline-none focus:border-[#004ac6]"
             />
+            {sendError && (
+              <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+                <span className="material-symbols-outlined text-rose-600 text-[16px] shrink-0 mt-0.5">warning</span>
+                <p className="text-[10px] font-semibold text-rose-700">{sendError}</p>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setIsWhatsappModalOpen(false)}
+                onClick={() => { setIsWhatsappModalOpen(false); setSendError(null); }}
                 className="px-4 py-2 border border-[#c3c6d7] rounded-xl text-xs font-bold text-[#49454f]"
               >
                 Cancel
               </button>
               <button
-                onClick={() => actionMutation.mutate({ action: 'send_message', value: whatsappContent })}
+                onClick={() => { setSendError(null); actionMutation.mutate({ action: 'send_message', value: whatsappContent }); }}
                 disabled={actionMutation.isPending || !whatsappContent.trim()}
                 className="px-5 py-2 bg-[#004ac6] text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5"
               >

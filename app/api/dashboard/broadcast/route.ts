@@ -1,6 +1,51 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
+import { sendWhatsAppMessage } from '@/lib/whatsapp';
+
+function buildDateFilter(start?: string | null, end?: string | null) {
+  let gte: Date | undefined;
+  let lte: Date | undefined;
+
+  if (start && start.trim()) {
+    const d = new Date(start.includes('T') ? start : `${start}T00:00:00`);
+    if (!isNaN(d.getTime())) gte = d;
+  }
+
+  if (end && end.trim()) {
+    const d = new Date(end.includes('T') ? end : `${end}T23:59:59.999`);
+    if (!isNaN(d.getTime())) lte = d;
+  }
+
+  if (!gte && !lte) return null;
+
+  const dateCond: any = {};
+  if (gte) dateCond.gte = gte;
+  if (lte) dateCond.lte = lte;
+
+  return {
+    OR: [
+      { createdAt: dateCond },
+      { leads: { some: { createdAt: dateCond } } },
+    ],
+  };
+}
+
+function buildTagFilter(value: string) {
+  const v = value.trim();
+  if (!v) return null;
+  const variants = Array.from(new Set([
+    v,
+    v.toUpperCase(),
+    v.toLowerCase(),
+    v.charAt(0).toUpperCase() + v.slice(1).toLowerCase(),
+  ]));
+  return {
+    tags: {
+      hasSome: variants,
+    },
+  };
+}
 
 export async function GET(req: Request) {
   try {
@@ -23,18 +68,19 @@ export async function GET(req: Request) {
       let whereClause: any = { tenantId, optedOutAt: null };
 
       if (type === 'tag' && value) {
-        whereClause.tags = { has: value };
+        const tagFilter = buildTagFilter(value);
+        if (tagFilter) Object.assign(whereClause, tagFilter);
       } else if (type === 'stage' && value) {
         whereClause.leads = {
           some: {
             status: value,
           },
         };
-      } else if (type === 'date_range' && start && end) {
-        whereClause.createdAt = {
-          gte: new Date(start),
-          lte: new Date(end),
-        };
+      } else if (type === 'date_range' && (start || end)) {
+        const dateFilter = buildDateFilter(start, end);
+        if (dateFilter) {
+          Object.assign(whereClause, dateFilter);
+        }
       }
 
       const recipientCount = await db.customer.count({
@@ -84,7 +130,8 @@ export async function POST(req: Request) {
     let whereClause: any = { tenantId, optedOutAt: null };
 
     if (recipientFilter.type === 'tag' && recipientFilter.value) {
-      whereClause.tags = { has: recipientFilter.value };
+      const tagFilter = buildTagFilter(recipientFilter.value);
+      if (tagFilter) Object.assign(whereClause, tagFilter);
     } else if (recipientFilter.type === 'stage' && recipientFilter.value) {
       whereClause.leads = {
         some: {
@@ -92,12 +139,10 @@ export async function POST(req: Request) {
         },
       };
     } else if (recipientFilter.type === 'date_range' && recipientFilter.value) {
-      const { start, end } = recipientFilter.value;
-      if (start && end) {
-        whereClause.createdAt = {
-          gte: new Date(start),
-          lte: new Date(end),
-        };
+      const { start, end } = typeof recipientFilter.value === 'object' ? recipientFilter.value : { start: '', end: '' };
+      const dateFilter = buildDateFilter(start, end);
+      if (dateFilter) {
+        Object.assign(whereClause, dateFilter);
       }
     }
 
@@ -132,30 +177,23 @@ export async function POST(req: Request) {
       },
     });
 
-    // 5. If sending now, create job stubs and inject simulated messages into live chats
+    // 5. If sending now, create job stubs and dispatch live WhatsApp messages
     if (!scheduledAt) {
-      const sentCount = customers.length;
-      const deliveredCount = Math.floor(sentCount * 0.98);
-      const readCount = Math.floor(deliveredCount * 0.82);
-      const repliedCount = Math.floor(readCount * 0.14);
-      const convertedCount = Math.floor(repliedCount * 0.45);
-      const failedCount = sentCount - deliveredCount;
-
-      // Update campaign stats
+      // Initialize campaign metrics to 0 so real WhatsApp socket receipts drive live counters
       await db.broadcastCampaign.update({
         where: { id: campaign.id },
         data: {
-          delivered: deliveredCount,
-          read: readCount,
-          replied: repliedCount,
-          converted: convertedCount,
-          failed: failedCount,
+          delivered: 0,
+          read: 0,
+          replied: 0,
+          converted: 0,
+          failed: 0,
         },
       });
 
-      // Stub Jobs Creation & simulated chat threads
+      // Send real WhatsApp message via whatsapp-engine HTTP Service (with fallback to direct DB log)
       for (const customer of customers) {
-        await db.broadcastJob.create({
+        const job = await db.broadcastJob.create({
           data: {
             tenantId,
             campaignId: campaign.id,
@@ -184,33 +222,45 @@ export async function POST(req: Request) {
           messageContent = `${messageContent}\n\n_${template.footer}_`;
         }
 
-        // Get or Create conversation
-        let conversation = await db.conversation.findFirst({
-          where: { tenantId, customerId: customer.id },
-        });
+        try {
+          // Attempt real WhatsApp dispatch through whatsapp-engine HTTP service
+          await sendWhatsAppMessage({
+            tenantId,
+            customerId: customer.id,
+            text: messageContent,
+            campaignId: campaign.id,
+            broadcastJobId: job.id,
+          });
+        } catch (engineErr) {
+          console.warn(`[Broadcast Engine] Real-time engine dispatch notice for customer ${customer.id}:`, engineErr instanceof Error ? engineErr.message : engineErr);
+          
+          // Fallback: Store DB conversation and message record so chat logs stay updated even if engine socket is unlinked
+          let conversation = await db.conversation.findFirst({
+            where: { tenantId, customerId: customer.id, channel: 'WHATSAPP' },
+          });
 
-        if (!conversation) {
-          conversation = await db.conversation.create({
+          if (!conversation) {
+            conversation = await db.conversation.create({
+              data: {
+                tenantId,
+                customerId: customer.id,
+                channel: 'WHATSAPP',
+                status: 'OPEN',
+              },
+            });
+          }
+
+          await db.message.create({
             data: {
               tenantId,
-              customerId: customer.id,
+              conversationId: conversation.id,
+              direction: 'OUTBOUND',
+              senderType: 'BOT',
+              content: messageContent,
               channel: 'WHATSAPP',
-              status: 'OPEN',
             },
           });
         }
-
-        // Add to Message Log
-        await db.message.create({
-          data: {
-            tenantId,
-            conversationId: conversation.id,
-            direction: 'OUTBOUND',
-            senderType: 'BOT',
-            content: messageContent,
-            channel: 'WHATSAPP',
-          },
-        });
       }
 
       // Log action to compliance AuditLog

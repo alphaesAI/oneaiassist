@@ -71,6 +71,7 @@ export default function NotificationBell() {
     <div className="relative font-sans text-left" ref={dropdownRef}>
       {/* Bell Icon Trigger */}
       <button
+        suppressHydrationWarning
         onClick={toggleDropdown}
         className="h-10 w-10 hover:bg-slate-100 rounded-full flex items-center justify-center text-[#49454f] relative transition-colors focus:outline-none"
       >

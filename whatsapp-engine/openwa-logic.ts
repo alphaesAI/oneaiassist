@@ -1,8 +1,9 @@
 import { create } from '@open-wa/wa-automate';
 import qrcode from 'qrcode';
-import { prisma, getTenantPrisma } from '../lib/db/index';
+import { getTenantPrisma } from '../lib/db/index';
 import { encrypt } from '../lib/encryption';
-import { runAIAgentAutoResponse, connectTenant } from './engine-logic';
+import { runAIAgentAutoResponse, connectTenant, handleMessageStatusUpdate } from './engine-logic';
+import { WhatsAppNormalizer } from './WhatsAppNormalizer';
 
 export const openwaSessions = new Map<string, any>();
 export const openwaQrCodes = new Map<string, string>();
@@ -91,14 +92,60 @@ export async function connectTenantOpenWA(tenantId: string, io: any) {
       }
     });
 
-    // 3. Inbound Message listener
+    // 3. Inbound Message listener (with normalizer, fromMe, STOP keyword, typing indicators)
     client.onMessage(async (message: any) => {
       if (message.isGroupMsg) return;
-      const rawPhone = message.from.split('@')[0];
-      const text = message.body || message.caption || '';
-      if (!text) return;
 
-      console.log(`[OpenWA Engine] Inbound message from ${rawPhone}: "${text}"`);
+      const canonical = WhatsAppNormalizer.normalizeOpenWA(message);
+      if (!canonical) return;
+
+      const { remoteJid, text, fromMe, pushName, messageType } = canonical;
+      const rawPhone = remoteJid.split('@')[0];
+
+      // Capture outbound echoes from physical device (fromMe) — record as OUTBOUND/AGENT, no AI
+      if (fromMe) {
+        try {
+          let conversation = await db.conversation.findFirst({
+            where: { tenantId, channel: 'WHATSAPP', status: 'OPEN' },
+            orderBy: { lastMessageAt: 'desc' },
+          });
+          if (conversation) {
+            await db.message.create({
+              data: {
+                tenantId,
+                conversationId: conversation.id,
+                direction: 'OUTBOUND',
+                senderType: 'AGENT',
+                content: text || '',
+                channel: 'WHATSAPP',
+                channelMessageId: canonical.messageId || null,
+                messageType,
+              },
+            });
+            await db.conversation.update({
+              where: { id: conversation.id },
+              data: { lastMessageAt: new Date() },
+            });
+            io.to(`tenant_${tenantId}`).emit('new_message', {
+              conversationId: conversation.id,
+              message: {
+                content: text || '',
+                direction: 'OUTBOUND',
+                senderType: 'AGENT',
+                createdAt: new Date(),
+              },
+            });
+          }
+        } catch (err) {
+          console.error(`[OpenWA Engine] Error recording fromMe message for tenant ${tenantId}:`, err);
+        }
+        return; // Do not trigger AI for physical device echoes
+      }
+
+      // Skip messages with no meaningful content (non-text media without caption)
+      if (!text && messageType === 'OTHER') return;
+
+      console.log(`[OpenWA Engine] Inbound message from ${rawPhone}: "${text}" (type: ${messageType})`);
 
       try {
         let customer = await db.customer.findFirst({
@@ -109,7 +156,7 @@ export async function connectTenantOpenWA(tenantId: string, io: any) {
           customer = await db.customer.create({
             data: {
               tenantId,
-              displayName: message.sender?.pushname || rawPhone,
+              displayName: pushName || rawPhone,
               primaryPhone: encrypt(rawPhone),
               optedIn: true,
             },
@@ -122,8 +169,21 @@ export async function connectTenantOpenWA(tenantId: string, io: any) {
 
         if (!conversation) {
           conversation = await db.conversation.create({
-            data: { tenantId, customerId: customer.id, channel: 'WHATSAPP', status: 'OPEN' },
+            data: { tenantId, customerId: customer.id, channel: 'WHATSAPP', status: 'OPEN', automationEnabled: true },
           });
+        }
+
+        // STOP keyword check — use tenant-configurable stopKeyword, fallback to 'STOP'
+        const botConfig = await db.botConfig.findUnique({ where: { tenantId } }).catch(() => null);
+        const stopKeyword = (botConfig as any)?.stopKeyword || 'STOP';
+        const isStopRequest = text.trim().toUpperCase() === stopKeyword.toUpperCase();
+
+        if (isStopRequest) {
+          await db.conversation.update({
+            where: { id: conversation.id },
+            data: { automationEnabled: false },
+          });
+          console.log(`[OpenWA Engine] STOP keyword received from ${rawPhone}. Automation disabled for conversation ${conversation.id}.`);
         }
 
         const newMsg = await db.message.create({
@@ -132,8 +192,10 @@ export async function connectTenantOpenWA(tenantId: string, io: any) {
             conversationId: conversation.id,
             direction: 'INBOUND',
             senderType: 'CUSTOMER',
-            content: text,
+            content: text || '',
             channel: 'WHATSAPP',
+            channelMessageId: canonical.messageId || null,
+            messageType,
           },
         });
 
@@ -142,12 +204,41 @@ export async function connectTenantOpenWA(tenantId: string, io: any) {
           message: newMsg,
         });
 
-        // Trigger AI Auto Response
-        runAIAgentAutoResponse(tenantId, conversation.id, io).catch((err) => {
-          console.error(`[OpenWA Engine] AI response error for tenant ${tenantId}:`, err);
-        });
+        // Only trigger AI auto-response if automation is still enabled (not STOP-listed)
+        if (!isStopRequest && conversation.automationEnabled !== false) {
+          // Show composing typing indicator
+          try {
+            await client.simulateTyping(remoteJid as any, true);
+          } catch (_) { /* non-critical */ }
+
+          try {
+            await runAIAgentAutoResponse(tenantId, conversation.id, io);
+          } catch (err) {
+            console.error(`[OpenWA Engine] AI response error for tenant ${tenantId}:`, err);
+          } finally {
+            try {
+              await client.simulateTyping(remoteJid as any, false);
+            } catch (_) { /* non-critical */ }
+          }
+        }
       } catch (err) {
         console.error(`[OpenWA Engine] Error processing inbound message for tenant ${tenantId}:`, err);
+      }
+    });
+
+    // 4. Delivery & Read Ack listener
+    client.onAck(async (ack: any) => {
+      try {
+        const msgId = ack.id?._serialized || ack.id?.id || (typeof ack.id === 'string' ? ack.id : '');
+        if (!msgId) return;
+
+        if (ack.ack === 2) {
+          await handleMessageStatusUpdate(tenantId, msgId, 'DELIVERED', io);
+        } else if (ack.ack === 3 || ack.ack === 4) {
+          await handleMessageStatusUpdate(tenantId, msgId, 'READ', io);
+        }
+      } catch (err) {
+        console.error(`[OpenWA Engine] Error handling ack:`, err);
       }
     });
 

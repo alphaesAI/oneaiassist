@@ -4,10 +4,12 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import qrcode from 'qrcode';
-import { prisma, getTenantPrisma } from '../lib/db/index';
-import { decrypt, encrypt } from '../lib/encryption';
+import { getTenantPrisma } from '../lib/db/index';
+import { decrypt } from '../lib/encryption';
 import { connectTenant, sessions, qrCodes, pairingCodes } from './engine-logic';
 import { connectTenantOpenWA, openwaSessions, openwaQrCodes } from './openwa-logic';
+import { MessageService } from './MessageService';
+import { TransportManager } from './transport/TransportManager';
 
 const app = express();
 app.use(cors());
@@ -172,74 +174,51 @@ app.post('/api/whatsapp/disconnect', async (req, res) => {
 });
 
 
-// REST API: Outbound Send Message
+// REST API: Outbound Send Message (MIME-aware, idempotent via MessageService)
 app.post('/api/whatsapp/send', async (req, res) => {
   try {
-    const { tenantId, to, text, conversationId } = req.body;
-    if (!tenantId || !to || !text || !conversationId) {
-      return res.status(400).json({ error: 'tenantId, to, text, and conversationId are required' });
+    const { tenantId, to, text, mediaId, mimeType, clientMessageId, conversationId } = req.body;
+    if (!tenantId || !to || !conversationId) {
+      return res.status(400).json({ error: 'tenantId, to, and conversationId are required' });
+    }
+    if (!text && !mediaId) {
+      return res.status(400).json({ error: 'Either text or mediaId is required' });
     }
 
-    const sock = sessions.get(tenantId);
-    if (!sock) {
+    // Ensure an active session exists (Baileys or OpenWA)
+    const hasSession = sessions.has(tenantId) || openwaSessions.has(tenantId);
+    if (!hasSession) {
       return res.status(400).json({ error: 'WhatsApp session is not active for this tenant.' });
     }
 
-    const db = getTenantPrisma(tenantId, 'ADMIN');
-
-    // Decrypt recipient phone number if it is encrypted in DB
-    let targetPhone = to;
-    if (to.includes(':')) {
-      try {
-        targetPhone = decrypt(to);
-      } catch (e) {
-        // Treat as raw phone number if decryption fails
-      }
-    }
-
-    // Clean phone number format for Baileys JID (e.g. "1234567890@s.whatsapp.net")
-    const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
-    const jid = `${cleanPhone}@s.whatsapp.net`;
-
-    console.log(`[Engine] Sending outbound message to ${jid} for tenant ${tenantId}: "${text}"`);
-
-    // Send via Baileys WASocket
-    const result = await sock.sendMessage(jid, { text });
-
-    // Save outbound message to DB (RLS-compliant)
-    const dbMessage = await db.message.create({
-      data: {
-        tenantId,
-        conversationId,
-        direction: 'OUTBOUND',
-        senderType: 'AGENT',
-        content: text,
-        channel: 'WHATSAPP',
-        channelMessageId: result?.key?.id || null,
-      },
-    });
-
-    // Update conversation timestamp
-    await db.conversation.update({
-      where: { id: conversationId },
-      data: { lastMessageAt: new Date() },
-    });
-
-    // Emit live Socket.io update to notify agent browser threads
-    io.to(`tenant_${tenantId}`).emit('new_message', {
+    const result = await MessageService.sendMessage(tenantId, {
+      to,
+      text,
+      mediaId,
+      mimeType,
+      clientMessageId,
       conversationId,
-      message: {
-        id: dbMessage.id,
-        content: dbMessage.content,
-        direction: dbMessage.direction,
-        senderType: dbMessage.senderType,
-        createdAt: dbMessage.createdAt,
-      },
-    });
+    }, io);
 
-    return res.json({ success: true, messageId: dbMessage.id });
+    return res.json(result);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown outbound send error';
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// REST API: Typing Indicator
+app.post('/api/whatsapp/typing', async (req, res) => {
+  try {
+    const { tenantId, to, on } = req.body;
+    if (!tenantId || !to) {
+      return res.status(400).json({ error: 'tenantId and to are required' });
+    }
+    const transport = TransportManager.getTransport(tenantId);
+    await transport.setTyping(to, on !== false);
+    return res.json({ success: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Typing indicator error';
     return res.status(500).json({ error: msg });
   }
 });

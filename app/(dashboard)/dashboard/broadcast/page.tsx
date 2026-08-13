@@ -2,6 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { SearchableTagSelect } from '@/components/ui/searchable-tag-select';
+import { useTenantInfo } from '@/hooks/useTenantInfo';
+import { io } from 'socket.io-client';
 
 type TemplateCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
 type TemplateStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -40,6 +43,8 @@ interface Campaign {
 
 export default function BroadcastCenterPage() {
   const queryClient = useQueryClient();
+  const { data: info } = useTenantInfo();
+  const tenantId = info?.tenantId;
   const templateBodyRef = useRef<HTMLTextAreaElement>(null);
 
   // Form State
@@ -82,6 +87,16 @@ export default function BroadcastCenterPage() {
     },
   });
 
+  // Auto-select first approved template if available
+  useEffect(() => {
+    if (templates.length > 0 && !selectedTemplateId) {
+      const approved = templates.find((t) => t.status === 'APPROVED') || templates[0];
+      if (approved) {
+        setSelectedTemplateId(approved.id);
+      }
+    }
+  }, [templates, selectedTemplateId]);
+
   const { data: campaigns = [], isLoading: campaignsLoading } = useQuery<Campaign[]>({
     queryKey: ['campaigns'],
     queryFn: async () => {
@@ -89,7 +104,31 @@ export default function BroadcastCenterPage() {
       if (!res.ok) throw new Error('Failed to load campaigns');
       return res.json();
     },
+    refetchInterval: 3000, // Poll every 3 seconds for live delivery/read updates
   });
+
+  // Socket.io Live Status Listener
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const socketInstance = io('http://localhost:3001', {
+      query: { tenantId },
+    });
+
+    socketInstance.on('broadcast_stats_updated', (data: any) => {
+      console.log('[Socket] Broadcast stats updated:', data);
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    });
+
+    socketInstance.on('message_updated', (data: any) => {
+      console.log('[Socket] Message updated event:', data);
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    });
+
+    return () => {
+      socketInstance.disconnect();
+    };
+  }, [tenantId, queryClient]);
 
   // Fetch preview count when filter variables change
   const [recipientCount, setRecipientCount] = useState(0);
@@ -286,8 +325,9 @@ export default function BroadcastCenterPage() {
   // Deterministic date/time formatting to prevent SSR hydration mismatches
   const formatTimeString = (dateInput: string | Date) => {
     const date = new Date(dateInput);
-    let hours = date.getHours();
-    const minutes = date.getMinutes().toString().padStart(2, '0');
+    if (isNaN(date.getTime())) return '';
+    let hours = date.getUTCHours();
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
     hours = hours ? hours : 12;
@@ -297,8 +337,9 @@ export default function BroadcastCenterPage() {
 
   const formatDateString = (dateInput: string | Date) => {
     const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return '';
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+    return `${months[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
   };
 
   // Compute estimated cost
@@ -343,9 +384,10 @@ export default function BroadcastCenterPage() {
             Save as Draft
           </button>
           <button
+            type="button"
             onClick={handleSendCampaignSubmit}
-            disabled={sendCampaignMutation.isPending || !campaignName || !selectedTemplateId}
-            className="px-5 py-2 rounded-xl bg-[#004ac6] hover:bg-[#003ca0] text-white font-bold text-xs shadow-md shadow-[#004ac6]/10 transition-all flex items-center gap-2 disabled:opacity-50"
+            disabled={sendCampaignMutation.isPending}
+            className="px-5 py-2 rounded-xl bg-[#004ac6] hover:bg-[#003ca0] text-white font-bold text-xs shadow-md shadow-[#004ac6]/10 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
           >
             <span className="material-symbols-outlined text-[16px]">send</span>
             {sendCampaignMutation.isPending ? 'Sending...' : 'Schedule/Send'}
@@ -390,6 +432,7 @@ export default function BroadcastCenterPage() {
                 <div className="h-10 bg-slate-100 rounded-xl animate-pulse" />
               ) : (
                 <select
+                  suppressHydrationWarning
                   value={selectedTemplateId}
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
                   className="w-full bg-white border border-[#c3c6d7] rounded-xl px-4 py-2.5 text-xs text-[#1c1b1f] focus:outline-none focus:border-[#004ac6] transition-all font-semibold"
@@ -484,6 +527,11 @@ export default function BroadcastCenterPage() {
                     onChange={() => {
                       setRecipientType('date_range');
                       setFilterValue('');
+                      if (!filterStartDate && !filterEndDate) {
+                        const today = new Date().toISOString().split('T')[0];
+                        setFilterStartDate(today);
+                        setFilterEndDate(today);
+                      }
                     }}
                     className="text-[#004ac6] focus:ring-[#004ac6]"
                   />
@@ -494,14 +542,10 @@ export default function BroadcastCenterPage() {
               {/* Recipient inputs fields */}
               {recipientType === 'tag' && (
                 <div className="space-y-1 pt-1.5 animate-in fade-in duration-200">
-                  <label htmlFor="tag-value-input" className="text-[9px] text-[#737686] font-bold block">Tag Value</label>
-                  <input
-                    id="tag-value-input"
-                    type="text"
-                    placeholder="e.g. VIP, Client, Lead"
+                  <label className="text-[9px] text-[#737686] font-bold block">Filter by Tag</label>
+                  <SearchableTagSelect
                     value={filterValue}
-                    onChange={(e) => setFilterValue(e.target.value)}
-                    className="w-full bg-slate-50 border border-[#c3c6d7] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#004ac6] font-semibold"
+                    onChange={setFilterValue}
                   />
                 </div>
               )}
@@ -526,26 +570,42 @@ export default function BroadcastCenterPage() {
               )}
 
               {recipientType === 'date_range' && (
-                <div className="grid grid-cols-2 gap-3 pt-1.5 animate-in fade-in duration-200">
-                  <div className="space-y-1">
-                    <label htmlFor="start-date-input" className="text-[9px] text-[#737686] font-bold block">From Created Date</label>
-                    <input
-                      id="start-date-input"
-                      type="date"
-                      value={filterStartDate}
-                      onChange={(e) => setFilterStartDate(e.target.value)}
-                      className="w-full bg-slate-50 border border-[#c3c6d7] rounded-xl px-3 py-1.5 text-xs focus:outline-none text-[#1c1b1f] font-semibold"
-                    />
+                <div className="space-y-2 pt-1.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-[#49454f]">Filter by Created Date</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = new Date().toISOString().split('T')[0];
+                        setFilterStartDate(today);
+                        setFilterEndDate(today);
+                      }}
+                      className="text-[10px] text-[#004ac6] font-bold hover:underline"
+                    >
+                      Set to Today
+                    </button>
                   </div>
-                  <div className="space-y-1">
-                    <label htmlFor="end-date-input" className="text-[9px] text-[#737686] font-bold block">To Created Date</label>
-                    <input
-                      id="end-date-input"
-                      type="date"
-                      value={filterEndDate}
-                      onChange={(e) => setFilterEndDate(e.target.value)}
-                      className="w-full bg-slate-50 border border-[#c3c6d7] rounded-xl px-3 py-1.5 text-xs focus:outline-none text-[#1c1b1f] font-semibold"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label htmlFor="start-date-input" className="text-[9px] text-[#737686] font-bold block">From Created Date</label>
+                      <input
+                        id="start-date-input"
+                        type="date"
+                        value={filterStartDate}
+                        onChange={(e) => setFilterStartDate(e.target.value)}
+                        className="w-full bg-slate-50 border border-[#c3c6d7] rounded-xl px-3 py-1.5 text-xs focus:outline-none text-[#1c1b1f] font-semibold"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label htmlFor="end-date-input" className="text-[9px] text-[#737686] font-bold block">To Created Date</label>
+                      <input
+                        id="end-date-input"
+                        type="date"
+                        value={filterEndDate}
+                        onChange={(e) => setFilterEndDate(e.target.value)}
+                        className="w-full bg-slate-50 border border-[#c3c6d7] rounded-xl px-3 py-1.5 text-xs focus:outline-none text-[#1c1b1f] font-semibold"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -730,8 +790,8 @@ export default function BroadcastCenterPage() {
                       </div>
                     )}
 
-                    <div className="text-[8px] text-slate-400 text-right mt-1 font-semibold">
-                      {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <div suppressHydrationWarning className="text-[8px] text-slate-400 text-right mt-1 font-semibold">
+                      10:42 AM
                     </div>
                   </div>
                 </div>

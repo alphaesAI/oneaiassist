@@ -529,18 +529,18 @@ export default function InboxPage() {
                   <span className="material-symbols-outlined text-[20px]">mood</span>
                 </button>
                 <div className="flex-1 relative">
-                  <input
-                    type="text"
+                  <textarea
+                    rows={2}
                     required
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
-                    disabled={sendReplyMutation.isPending || (isSessionClosed && !showTemplatesDropdown)}
+                    disabled={sendReplyMutation.isPending}
                     placeholder={
                       isSessionClosed
-                        ? 'WhatsApp session is closed. Select a Template to reply...'
+                        ? 'Session expired — use a Template or type a new message...'
                         : 'Type your reply here...'
                     }
-                    className="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-[#c3c6d7] rounded-full focus:outline-none focus:border-[#004ac6] focus:ring-4 focus:ring-[#004ac6]/10 text-xs disabled:opacity-75"
+                    className="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-[#c3c6d7] rounded-xl focus:outline-none focus:border-[#004ac6] focus:ring-4 focus:ring-[#004ac6]/10 text-xs disabled:opacity-75 resize-none"
                   />
                   <button
                     type="submit"
@@ -558,13 +558,7 @@ export default function InboxPage() {
                   <button
                     type="button"
                     onClick={() => setShowTemplatesDropdown(!showTemplatesDropdown)}
-                    disabled={!isSessionClosed}
-                    className={cn(
-                      'flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-bold border transition-colors',
-                      !isSessionClosed
-                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                        : 'bg-[#004ac6]/5 border-[#004ac6]/20 text-[#004ac6] hover:bg-[#004ac6]/10'
-                    )}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-bold border transition-colors bg-[#004ac6]/5 border-[#004ac6]/20 text-[#004ac6] hover:bg-[#004ac6]/10"
                   >
                     <span className="material-symbols-outlined text-[14px]">description</span>
                     Templates

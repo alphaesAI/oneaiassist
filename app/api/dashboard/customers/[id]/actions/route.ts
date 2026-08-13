@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
+import { decrypt } from '@/lib/encryption';
 import { LeadStatus } from '@prisma/client';
 
 export async function POST(
@@ -71,7 +72,25 @@ export async function POST(
         return NextResponse.json({ error: 'Message content cannot be empty' }, { status: 400 });
       }
 
-      // Find or create active conversation
+      // 1. Fetch the customer's encrypted phone number
+      const customer = await db.customer.findUnique({
+        where: { id: customerId },
+        select: { primaryPhone: true },
+      });
+
+      if (!customer?.primaryPhone) {
+        return NextResponse.json({ error: 'Customer phone number not found' }, { status: 404 });
+      }
+
+      // 2. Decrypt phone if it is stored encrypted
+      let phone = customer.primaryPhone;
+      try {
+        phone = decrypt(customer.primaryPhone);
+      } catch {
+        // Already plaintext if decryption fails
+      }
+
+      // 3. Find or create the active conversation for this customer
       let conversation = await db.conversation.findFirst({
         where: { customerId, status: 'OPEN', tenantId },
         orderBy: { lastMessageAt: 'desc' },
@@ -84,29 +103,39 @@ export async function POST(
             customerId,
             channel: 'WHATSAPP',
             status: 'OPEN',
-          }
+          },
         });
       }
 
-      // Write outbound message
-      const message = await db.message.create({
-        data: {
+      // 4. Call the WhatsApp engine to actually deliver the message
+      const engineRes = await fetch('http://localhost:3001/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           tenantId,
+          to: phone,
+          text: value.trim(),
           conversationId: conversation.id,
-          direction: 'OUTBOUND',
-          senderType: 'AGENT',
-          content: value.trim(),
-          channel: 'WHATSAPP',
-        }
+        }),
       });
 
-      // Update last message timestamp
+      if (!engineRes.ok) {
+        const engineErr = await engineRes.json().catch(() => ({}));
+        return NextResponse.json(
+          { error: engineErr.error || 'WhatsApp engine failed to send the message. Is the session connected?' },
+          { status: engineRes.status }
+        );
+      }
+
+      const engineData = await engineRes.json();
+
+      // 5. Update conversation timestamp (message recording is done by the engine)
       await db.conversation.update({
         where: { id: conversation.id, tenantId },
-        data: { lastMessageAt: new Date() }
+        data: { lastMessageAt: new Date() },
       });
 
-      return NextResponse.json({ success: true, message });
+      return NextResponse.json({ success: true, messageId: engineData.messageId });
     }
 
     return NextResponse.json({ error: `Invalid action: ${action}` }, { status: 400 });
