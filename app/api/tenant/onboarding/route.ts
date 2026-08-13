@@ -65,7 +65,8 @@ export async function GET() {
       success: true,
       status,
       stepsComplete,
-      progressPercent
+      progressPercent,
+      onboardingDismissed: progress.onboardingDismissed,
     });
   } catch (err: unknown) {
     console.error('Error fetching onboarding progress:', err);
@@ -86,7 +87,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { step, completed } = body; // e.g. { step: 'intakeFlowBuilt', completed: true }
 
-    if (!['intakeFlowBuilt', 'goneLive'].includes(step)) {
+    if (!['intakeFlowBuilt', 'goneLive', 'onboardingDismissed'].includes(step)) {
       return NextResponse.json({ error: 'Invalid step name for manual override.' }, { status: 400 });
     }
 

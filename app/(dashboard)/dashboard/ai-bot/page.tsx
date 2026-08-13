@@ -46,7 +46,7 @@ interface Question {
   options: string[];
 }
 
-export default function BotConfigPage() {
+export default function AiBotPage() {
   const [activeTab, setActiveTab] = useState<TabType>('identity');
 
   useEffect(() => {
@@ -58,7 +58,6 @@ export default function BotConfigPage() {
         [
           'identity',
           'intake',
-          'knowledge',
           'escalation',
           'guardrails',
           'catalog',
@@ -144,7 +143,6 @@ export default function BotConfigPage() {
   const navTabs = [
     { id: 'identity' as const, label: 'Identity & Model Tuning', icon: Bot },
     { id: 'intake' as const, label: 'Intake Flow Builder', icon: Workflow },
-    { id: 'knowledge' as const, label: 'RAG Knowledge Base', icon: BookOpen },
     { id: 'escalation' as const, label: 'Human Handoff Rules', icon: Headphones },
     { id: 'guardrails' as const, label: 'Safety & Compliance', icon: ShieldCheck },
     { id: 'catalog' as const, label: 'Product Catalog', icon: Package },
@@ -160,11 +158,11 @@ export default function BotConfigPage() {
           <div className="flex items-center gap-2">
             <Sparkles className="w-6 h-6 text-[#004ac6]" />
             <h1 className="text-2xl font-bold tracking-tight text-[#1c1b1f]">
-              AI Agent Studio
+              AI & Bot Studio
             </h1>
           </div>
           <p className="text-xs text-[#49454f] mt-1">
-            Configure agent persona, hyperparameter tuning, RAG vector knowledge base, interactive WhatsApp intake flows, and human handover rules.
+            Configure agent persona, hyperparameter tuning, interactive WhatsApp intake flows, and human handover rules.
           </p>
         </div>
 
@@ -204,7 +202,6 @@ export default function BotConfigPage() {
 
       {/* Tab Contents */}
       {activeTab === 'identity' && <BotIdentityTab />}
-      {activeTab === 'knowledge' && <BotKnowledgeRagTab />}
       {activeTab === 'escalation' && <BotEscalationTab />}
       {activeTab === 'guardrails' && <BotGuardrailsTab />}
       {activeTab === 'catalog' && <BotCatalogTab />}

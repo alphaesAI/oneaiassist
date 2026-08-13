@@ -208,7 +208,7 @@ export default async function DashboardPage() {
           <div>
             <h4 className="font-bold text-sm text-amber-900">AI Trial Cap Reached</h4>
             <p className="text-xs text-[#49454f] mt-1 leading-relaxed">
-              Your platform trial auto-responses have hit the cap (5 messages). Auto-reply has been disabled. Go to <a href="/dashboard/bot-config" className="text-[#004ac6] font-bold underline">Bot Config</a> to connect your OpenAI/Anthropic/Gemini API key.
+              Your platform trial auto-responses have hit the cap (5 messages). Auto-reply has been disabled. Go to <a href="/dashboard/settings?tab=developer" className="text-[#004ac6] font-bold underline">Settings</a> to connect your OpenAI/Anthropic/Gemini API key.
             </p>
           </div>
         </div>

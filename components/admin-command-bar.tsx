@@ -54,11 +54,11 @@ export default function AdminCommandBar({ userRole = 'ADMIN', tenantName }: Admi
           </Link>
 
           <Link
-            href="/dashboard/broadcast"
+            href="/dashboard/campaigns"
             className="inline-flex items-center gap-2 px-3.5 py-2 bg-blue-800/60 hover:bg-blue-800/90 text-white font-semibold text-xs rounded-xl border border-blue-400/30 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             <Send className="w-4 h-4 text-cyan-300" />
-            <span>Send Broadcast</span>
+            <span>Campaigns</span>
           </Link>
 
           <Link
@@ -70,11 +70,11 @@ export default function AdminCommandBar({ userRole = 'ADMIN', tenantName }: Admi
           </Link>
 
           <Link
-            href="/dashboard/bot-config"
+            href="/dashboard/ai-bot"
             className="inline-flex items-center gap-2 px-3.5 py-2 bg-blue-800/60 hover:bg-blue-800/90 text-white font-semibold text-xs rounded-xl border border-blue-400/30 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             <Bot className="w-4 h-4 text-emerald-300" />
-            <span>AI Bot Config</span>
+            <span>AI & Bot</span>
           </Link>
 
           <Link
@@ -87,7 +87,7 @@ export default function AdminCommandBar({ userRole = 'ADMIN', tenantName }: Admi
 
           {userRole === 'ADMIN' && (
             <Link
-              href="/dashboard/team"
+              href="/dashboard/settings?tab=workspace&sub=team"
               className="inline-flex items-center gap-2 px-3 py-2 bg-blue-900/40 hover:bg-blue-900/70 text-blue-100 font-semibold text-xs rounded-xl border border-blue-400/20 transition-all"
             >
               <UserCheck className="w-4 h-4 text-blue-300" />

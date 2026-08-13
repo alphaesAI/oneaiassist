@@ -168,7 +168,7 @@ export default function LandingPageClient({ session, dbConnected, dbError }: Lan
                   <Link href="/dashboard" className="text-primary border-b-2 border-primary pb-1 font-body-md transition-all duration-200">
                     Dashboard
                   </Link>
-                  <Link href="/dashboard/bot-config" className="text-on-surface-variant hover:text-primary transition-colors font-body-md">
+                  <Link href="/dashboard/ai-bot" className="text-on-surface-variant hover:text-primary transition-colors font-body-md">
                     Agents
                   </Link>
                   <Link href="/dashboard/leads" className="text-on-surface-variant hover:text-primary transition-colors font-body-md">
@@ -245,7 +245,7 @@ export default function LandingPageClient({ session, dbConnected, dbError }: Lan
                 <Link href="/dashboard" className="text-primary font-body-md py-2 border-b border-outline-variant/10">
                   Dashboard
                 </Link>
-                <Link href="/dashboard/bot-config" className="text-on-surface-variant font-body-md py-2 border-b border-outline-variant/10">
+                <Link href="/dashboard/ai-bot" className="text-on-surface-variant font-body-md py-2 border-b border-outline-variant/10">
                   Agents
                 </Link>
                 <Link href="/dashboard/leads" className="text-on-surface-variant font-body-md py-2 border-b border-outline-variant/10">

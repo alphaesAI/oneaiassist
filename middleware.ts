@@ -39,14 +39,15 @@ export default withAuth(
       return NextResponse.redirect(new URL('/dashboard', req.url));
     }
 
-    // 4. VIEWER blocked from Inbox, Leads, Customers, Bot Config, Templates, Broadcast
+    // 4. VIEWER blocked from Inbox, Leads, Customers, AI & Bot, Knowledge Base, Templates, Campaigns
     const isAgentOrAboveRoute =
       url.startsWith('/dashboard/inbox') ||
       url.startsWith('/dashboard/leads') ||
       url.startsWith('/dashboard/customers') ||
-      url.startsWith('/dashboard/bot-config') ||
+      url.startsWith('/dashboard/ai-bot') ||
+      url.startsWith('/dashboard/knowledge-base') ||
       url.startsWith('/dashboard/templates') ||
-      url.startsWith('/dashboard/broadcast');
+      url.startsWith('/dashboard/campaigns');
 
     if (isAgentOrAboveRoute && role === 'VIEWER') {
       return NextResponse.redirect(new URL('/dashboard', req.url));

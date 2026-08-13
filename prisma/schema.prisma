@@ -624,6 +624,7 @@ model TenantOnboardingProgress {
   agentInvited      Boolean  @default(false)
   testMessageSent   Boolean  @default(false)
   goneLive          Boolean  @default(false)
+  onboardingDismissed Boolean @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

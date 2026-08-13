@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { X } from 'lucide-react';
 
 interface OnboardingStatus {
   accountCreated: boolean;
@@ -44,28 +45,28 @@ const STEP_DETAILS = [
     key: 'botNameSet',
     title: 'Set up bot name & greeting',
     description: 'Give your AI assistant a custom name and welcoming introduction greeting.',
-    link: '/dashboard/bot-config',
+    link: '/dashboard/ai-bot',
     manual: false,
   },
   {
     key: 'intakeFlowBuilt',
     title: 'Build intake question flow',
     description: 'Configure bot questions for automatic lead intake and routing.',
-    link: '/dashboard/bot-config',
+    link: '/dashboard/ai-bot',
     manual: true,
   },
   {
     key: 'productAdded',
     title: 'Add your first product/policy',
     description: 'Insert items or documents into your agent catalog to activate RAG knowledge.',
-    link: '/dashboard/bot-config?tab=knowledge',
+    link: '/dashboard/knowledge-base',
     manual: false,
   },
   {
     key: 'agentInvited',
     title: 'Invite a team agent',
     description: 'Add support specialists or co-administrators to your team workspace.',
-    link: '/dashboard/team',
+    link: '/dashboard/settings?tab=workspace&sub=team',
     manual: false,
   },
   {
@@ -90,6 +91,7 @@ export default function OnboardingChecklistWidget({ compact = false }: { compact
   const [percent, setPercent] = useState(0);
   const [loading, setLoading] = useState(true);
   const [togglingStep, setTogglingStep] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
 
   const fetchProgress = async () => {
     try {
@@ -100,6 +102,7 @@ export default function OnboardingChecklistWidget({ compact = false }: { compact
           setStatus(data.status);
           setStepsComplete(data.stepsComplete);
           setPercent(data.progressPercent);
+          setDismissed(!!data.onboardingDismissed);
         }
       }
     } catch (err) {
@@ -131,6 +134,21 @@ export default function OnboardingChecklistWidget({ compact = false }: { compact
     }
   };
 
+  const handleDismiss = async () => {
+    try {
+      const res = await fetch('/api/tenant/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'onboardingDismissed', completed: true }),
+      });
+      if (res.ok) {
+        setDismissed(true);
+      }
+    } catch (err) {
+      console.error('Error dismissing onboarding:', err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-white border border-[#c3c6d7] rounded-xl p-8 flex flex-col items-center justify-center min-h-[200px] animate-pulse">
@@ -140,7 +158,7 @@ export default function OnboardingChecklistWidget({ compact = false }: { compact
     );
   }
 
-  if (!status) return null;
+  if (dismissed || !status) return null;
 
   // Find index of first incomplete step to highlight as "Active"
   const activeIndex = STEP_KEYS.findIndex((key) => !status[key]);
@@ -148,16 +166,19 @@ export default function OnboardingChecklistWidget({ compact = false }: { compact
   // Render Compact Version
   if (compact) {
     return (
-      <div className="bg-white border border-[#c3c6d7] rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
-        <div className="flex justify-between items-start mb-4">
+      <div className="bg-white border border-[#c3c6d7] rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow relative">
+        <div className="flex justify-between items-start mb-4 gap-2">
           <div>
             <h4 className="text-md font-bold text-[#1c1b1f]">Setup Onboarding Checklist</h4>
             <p className="text-xs text-[#49454f] mt-0.5">{stepsComplete} of 8 steps completed</p>
           </div>
-          <Link href="/dashboard/onboarding" className="text-xs font-bold text-[#004ac6] hover:underline flex items-center gap-1">
-            <span>View All</span>
-            <span className="material-symbols-outlined text-sm">arrow_forward</span>
-          </Link>
+          <button
+            onClick={handleDismiss}
+            className="text-gray-400 hover:text-gray-600 transition-colors focus:outline-none p-1 rounded-full hover:bg-slate-100 shrink-0"
+            title="Dismiss Onboarding Checklist"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Progress Bar */}
@@ -339,7 +360,7 @@ export default function OnboardingChecklistWidget({ compact = false }: { compact
       <footer className="mt-12 pt-8 border-t border-[#c3c6d7]/60 text-center">
         <p className="text-xs text-[#49454f] mb-4">Need help setting up your assistant?</p>
         <div className="flex justify-center gap-8">
-          <Link className="flex items-center gap-1.5 text-xs font-bold text-[#004ac6] hover:underline" href="/dashboard/bot-config">
+          <Link className="flex items-center gap-1.5 text-xs font-bold text-[#004ac6] hover:underline" href="/dashboard/ai-bot">
             <span className="material-symbols-outlined text-[16px]">menu_book</span>
             <span>Read Docs & Guide</span>
           </Link>

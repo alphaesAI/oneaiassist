@@ -76,7 +76,7 @@ export default function PricingClient({ session, dbConnected, dbError }: Pricing
                   <Link href="/dashboard" className="text-on-surface-variant hover:text-primary transition-colors font-body-md">
                     Dashboard
                   </Link>
-                  <Link href="/dashboard/bot-config" className="text-on-surface-variant hover:text-primary transition-colors font-body-md">
+                  <Link href="/dashboard/ai-bot" className="text-on-surface-variant hover:text-primary transition-colors font-body-md">
                     Agents
                   </Link>
                   <Link href="/dashboard/leads" className="text-on-surface-variant hover:text-primary transition-colors font-body-md">
@@ -154,7 +154,7 @@ export default function PricingClient({ session, dbConnected, dbError }: Pricing
             {session ? (
               <>
                 <Link href="/dashboard" className="text-on-surface px-2 py-1 font-body-md">Dashboard</Link>
-                <Link href="/dashboard/bot-config" className="text-on-surface px-2 py-1 font-body-md">Agents</Link>
+                <Link href="/dashboard/ai-bot" className="text-on-surface px-2 py-1 font-body-md">Agents</Link>
                 <Link href="/dashboard/leads" className="text-on-surface px-2 py-1 font-body-md">Contacts</Link>
                 <Link href="/dashboard/analytics" className="text-on-surface px-2 py-1 font-body-md">Analytics</Link>
                 <button

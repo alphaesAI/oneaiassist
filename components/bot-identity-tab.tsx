@@ -99,7 +99,7 @@ export default function BotIdentityTab() {
         </p>
         <div className="pt-1">
           <Link
-            href="/dashboard/settings?tab=security"
+            href="/dashboard/settings?tab=developer"
             className="inline-flex items-center gap-1 text-xs font-bold text-[#004ac6] hover:underline"
           >
             Manage Credentials in Admin Settings &rarr;

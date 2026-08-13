@@ -3,31 +3,33 @@
 import React, { useState, useEffect } from 'react';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
 import { 
-  Phone, 
-  ShieldCheck, 
-  Building2, 
-  Activity, 
-  SlidersHorizontal 
+  SlidersHorizontal,
+  Users,
+  Sparkles,
+  Code2,
+  CreditCard,
+  ShieldCheck
 } from 'lucide-react';
 
-import SettingsChannelsTab from '@/components/settings-channels-tab';
-import SettingsSecurityTab from '@/components/settings-security-tab';
-import SettingsBrandingTab from '@/components/settings-branding-tab';
-import SettingsLogsTab from '@/components/settings-logs-tab';
+import SettingsWorkspaceTab from '@/components/settings-workspace-tab';
+import SettingsAiTab from '@/components/settings-ai-tab';
+import SettingsDeveloperTab from '@/components/settings-developer-tab';
+import SettingsAccountTab from '@/components/settings-account-tab';
+import SettingsComplianceTab from '@/components/settings-compliance-tab';
 
-type SettingsTab = 'channels' | 'security' | 'branding' | 'logs';
+type SettingsTab = 'workspace' | 'ai' | 'developer' | 'account' | 'compliance';
 
 export default function SettingsPage() {
   const { data: info } = useTenantInfo();
   const tenantId = info?.tenantId;
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('channels');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('workspace');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab') as SettingsTab;
-      if (tabParam && ['channels', 'security', 'branding', 'logs'].includes(tabParam)) {
+      if (tabParam && ['workspace', 'ai', 'developer', 'account', 'compliance'].includes(tabParam)) {
         setActiveTab(tabParam);
       }
     }
@@ -44,71 +46,85 @@ export default function SettingsPage() {
           </h1>
         </div>
         <p className="text-sm text-[#49454f] mt-1">
-          Manage agency WhatsApp channels, encrypted AI provider keys, branding assets, business hours, and infrastructure health logs.
+          Manage agency channels, team members, custom branding, AI parameters, developer keys, billing, and system compliance logs.
         </p>
       </div>
 
-      {/* 4-Tab Secondary Navigation Bar */}
+      {/* 5-Tab Clustered Secondary Navigation Bar */}
       <div className="flex items-center gap-2 border-b border-gray-200 overflow-x-auto pb-1">
         <button
           type="button"
-          onClick={() => setActiveTab('channels')}
+          onClick={() => setActiveTab('workspace')}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition shrink-0 ${
-            activeTab === 'channels'
+            activeTab === 'workspace'
               ? 'border-[#004ac6] text-[#004ac6]'
               : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
           }`}
         >
-          <Phone className="w-4 h-4" />
-          <span>WhatsApp & Channels</span>
+          <Users className="w-4 h-4" />
+          <span>Workspace</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveTab('security')}
+          onClick={() => setActiveTab('ai')}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition shrink-0 ${
-            activeTab === 'security'
+            activeTab === 'ai'
+              ? 'border-[#004ac6] text-[#004ac6]'
+              : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>AI Configuration</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('developer')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition shrink-0 ${
+            activeTab === 'developer'
+              ? 'border-[#004ac6] text-[#004ac6]'
+              : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+          }`}
+        >
+          <Code2 className="w-4 h-4" />
+          <span>Developer</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('account')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition shrink-0 ${
+            activeTab === 'account'
+              ? 'border-[#004ac6] text-[#004ac6]'
+              : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+          }`}
+        >
+          <CreditCard className="w-4 h-4" />
+          <span>Account & Billing</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('compliance')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition shrink-0 ${
+            activeTab === 'compliance'
               ? 'border-[#004ac6] text-[#004ac6]'
               : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
           }`}
         >
           <ShieldCheck className="w-4 h-4" />
-          <span>Security & API Keys</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('branding')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition shrink-0 ${
-            activeTab === 'branding'
-              ? 'border-[#004ac6] text-[#004ac6]'
-              : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-          }`}
-        >
-          <Building2 className="w-4 h-4" />
-          <span>Company Profile & Branding</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('logs')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition shrink-0 ${
-            activeTab === 'logs'
-              ? 'border-[#004ac6] text-[#004ac6]'
-              : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-          }`}
-        >
-          <Activity className="w-4 h-4" />
-          <span>System Health & Logs</span>
+          <span>Compliance & Logs</span>
         </button>
       </div>
 
       {/* Tab Contents */}
       <div className="pt-2">
-        {activeTab === 'channels' && <SettingsChannelsTab tenantId={tenantId} />}
-        {activeTab === 'security' && <SettingsSecurityTab />}
-        {activeTab === 'branding' && <SettingsBrandingTab />}
-        {activeTab === 'logs' && <SettingsLogsTab />}
+        {activeTab === 'workspace' && <SettingsWorkspaceTab tenantId={tenantId} />}
+        {activeTab === 'ai' && <SettingsAiTab />}
+        {activeTab === 'developer' && <SettingsDeveloperTab />}
+        {activeTab === 'account' && <SettingsAccountTab />}
+        {activeTab === 'compliance' && <SettingsComplianceTab />}
       </div>
     </div>
   );
