@@ -106,6 +106,7 @@ The Lead Pipeline provides real-time visibility into customer sales opportunitie
 - **Dynamic Filters**: Real-time filtering by search text, assigned agent, source channel, or creation date.
 - **`+ Add Lead` Dialog**: Fast lead creation with phone encryption and agent assignment.
 - **Accessibility Fixes**: Added explicit `htmlFor`, `id`, and `name` attributes to eliminate browser form warnings.
+- **Click-to-Profile Redirection**: Customer display names in both the Kanban cards and the List view table rows are clickable hyperlinks that navigate directly to the customer's corresponding **Customer 360 Profile page** (`/dashboard/customers/[id]`).
 
 ---
 
@@ -118,6 +119,7 @@ The Customer Directory maintains all customer contact records, opt-in consent st
 ### Core Capabilities
 - **Directory Table**: Displaying Customer Name, Email, Decrypted Primary Phone, Location, Opt-In Status badge (`Opted In` / `No Consent`), Tags, and Active Policy details.
 - **Customer 360 Profile (`/dashboard/customers/[id]`)**: Full chronological activity timeline including AI Bot Q&A logs, WhatsApp messages, policy activation events, and agent notes.
+- **Live Inbox Detail Panel Link**: The "View Full Profile" button in the right-hand sidebar panel of the live chat inbox (`/dashboard/inbox`) redirects directly to the active customer's **Customer 360 Profile page** rather than the general leads pipeline.
 - **Privacy & Compliance**: Single-click GDPR data deletion option.
 - **Critical Encryption Fix**: Resolved a database ciphertext bug in `GET /api/dashboard/customers/[id]` by applying `decrypt(customer.primaryPhone)` prior to payload rendering, restoring clean human-readable phone numbers (`123-456-7890`, `+15559876543`).
 
@@ -141,7 +143,7 @@ The Bot Config workspace gives administrators complete control over AI provider 
 
 ### 3. Knowledge Base & Policy PDF Vector Indexing
 Administrators can upload policy PDFs or choose from pre-loaded sample policy documents to index into PostgreSQL `pgvector`:
-
+- **Integrated RAG Tab**: The Knowledge Base Studio is fully integrated as a tab inside **AI & Bot Studio** (with the standalone sidebar navigation link removed for nav clean up).
 - **PDF Upload Modal**: Drag-and-drop file uploader or 1-click sample document selection:
   - `Senior_Medicare_Supplemental_Guide_2026.pdf`
   - `Dental_Vision_Plus_Coverage_2026.pdf`
@@ -155,6 +157,7 @@ Administrators can upload policy PDFs or choose from pre-loaded sample policy do
 - **Escalation Rules**: Automated human handover triggers (Negative sentiment `<0.3`, retry limit `>=2`, keyword requests) with round-robin team distribution.
 - **AI Guardrails**: System instructions prompt editor, tone of voice selector, max token bounds, and HIPAA/GDPR privacy banner.
 - **Product Catalog**: Managed health policies table displaying state coverage (`NY, CA, TX`), monthly premiums (`$50 - $350/mo`), and max sums insured.
+  - **Specs PDF Auto-Indexing**: When creating or editing products in the catalog modal, admins can upload a policy brochure PDF that auto-indexes directly into the pgvector database.
 - **AI Sandbox**: Interactive prompt test playground with live RAG vector score evaluation.
 - **Audit & History**: Chronological log of bot configuration updates.
 

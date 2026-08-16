@@ -80,6 +80,9 @@ The Lead Pipeline provides real-time visibility into customer sales opportunitie
 6. **Won**: Policy purchased & active.
 7. **Lost**: Lead closed or uncontactable.
 
+### Verified Features & Enhancements
+- **Click-to-Profile Redirection**: Customer display names in both the Kanban cards and the List view table rows are clickable hyperlinks that navigate directly to the customer's corresponding **Customer 360 Profile page** (`/dashboard/customers/[id]`).
+
 ---
 
 ## 6. Customers Directory & 360° Profile View (`/dashboard/customers`)
@@ -91,6 +94,7 @@ The Customer Directory maintains all customer contact records, opt-in consent st
 ### Core Capabilities
 - **Directory Table**: Displaying Customer Name, Email, Decrypted Primary Phone, Location, Opt-In Status, Tags, and Active Policy details.
 - **Customer 360 Profile**: Full activity timeline including AI Bot Q&A logs, WhatsApp messages, policy activation events, and agent notes.
+- **Live Inbox Detail Panel Link**: The "View Full Profile" button in the right-hand sidebar panel of the live chat inbox (`/dashboard/inbox`) redirects directly to the active customer's **Customer 360 Profile page** instead of the general leads pipeline.
 
 ---
 
@@ -111,8 +115,10 @@ The Bot Config workspace gives administrators complete control over AI provider 
 
 ### 3. Knowledge Base & Policy PDF Vector Indexing
 Administrators can upload policy PDFs or choose from pre-loaded sample policy documents to index into PostgreSQL `pgvector`:
+- **Integrated RAG Tab**: The Knowledge Base Studio is fully integrated as a tab inside **AI & Bot Studio** (with the standalone sidebar navigation link removed for nav clean up).
 - **Vector Embedding Pipeline**: Automatically parses PDF text, generates vector embeddings (`text-embedding-004`), and indexes vector chunks into `pgvector`.
 - **RAG Policy Recommendations**: Matches customer queries to specific policies.
+- **Product Catalog Specs PDF Upload**: When creating or editing products in the catalog modal, admins can upload a policy brochure PDF that auto-indexes directly into the pgvector database.
 
 ---
 
