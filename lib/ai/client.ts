@@ -148,7 +148,7 @@ export async function logTokenUsage(
  * Returns a unified chat AI client for the tenant.
  * Decrypts the custom API key or falls back to platform key with usage caps.
  */
-export async function getTenantAIClient(tenantId: string): Promise<AIClient> {
+export async function getTenantAIClient(tenantId: string, bypassTrialCheck: boolean = false): Promise<AIClient> {
   const db = getTenantPrisma(tenantId, 'ADMIN');
 
   const config = await db.tenantAIConfig.findUnique({
@@ -168,10 +168,12 @@ export async function getTenantAIClient(tenantId: string): Promise<AIClient> {
 
   // Fallback to platform keys if no tenant key is configured
   if (!apiKey) {
-    // Enforce trial usage limit
-    const exceeded = await isTrialExceeded(tenantId);
-    if (exceeded) {
-      throw new Error('TrialLimitExceeded');
+    // Enforce trial usage limit unless explicitly bypassed
+    if (!bypassTrialCheck) {
+      const exceeded = await isTrialExceeded(tenantId);
+      if (exceeded) {
+        throw new Error('TrialLimitExceeded');
+      }
     }
 
     if (provider === 'OPENAI') {

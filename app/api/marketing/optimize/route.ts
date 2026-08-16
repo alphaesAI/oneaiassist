@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const aiClient = await getTenantAIClient('tenant_pme_ff9xl');
+      const aiClient = await getTenantAIClient('tenant_pme_ff9xl', true);
       const response = await aiClient.generateChat([
         {
           role: 'system',

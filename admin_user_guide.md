@@ -119,6 +119,7 @@ Administrators can upload policy PDFs or choose from pre-loaded sample policy do
 - **Vector Embedding Pipeline**: Automatically parses PDF text, generates vector embeddings (`text-embedding-004`), and indexes vector chunks into `pgvector`.
 - **RAG Policy Recommendations**: Matches customer queries to specific policies.
 - **Product Catalog Specs PDF Upload**: When creating or editing products in the catalog modal, admins can upload a policy brochure PDF that auto-indexes directly into the pgvector database.
+- **Trial Cap Exemption**: Administrative dashboard tasks (document indexing, PDF uploads, compliance audits) are exempted from the trial usage caps.
 
 ---
 

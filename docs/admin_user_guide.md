@@ -148,6 +148,7 @@ Administrators can upload policy PDFs or choose from pre-loaded sample policy do
   - `Senior_Medicare_Supplemental_Guide_2026.pdf`
   - `Dental_Vision_Plus_Coverage_2026.pdf`
 - **Vector Embedding Pipeline**: Automatically parses PDF text, generates vector embeddings (`text-embedding-004`), and indexes vector chunks into `pgvector`.
+- **Trial Cap Exemption**: PDF document uploads, catalog brochure indexing, and compliance pre-flight audits are exempted from the automated WhatsApp trial limit restrictions, ensuring administrators can perform all dashboard setup tasks without hitting trial caps.
 - **RAG Policy Recommendations Verified**:
   - *Buying Query* (*"I want to buy a health plan in NY for around $100"*): Recommends **`POL-HEALTH-001 Basic Health Plan`** ($50–$150/mo).
   - *Renewal Query* (*"How do I renew my policy?"*): Recommends online renewal under **`POL-HEALTH-001 & POL-HEALTH-002`**.

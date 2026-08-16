@@ -29,7 +29,7 @@ export async function processAndIndexPolicy(
 
   // 2. Generate a short plain-language summary of the policy
   console.log('[RAG Index] Generating plain-language AI summary...');
-  const aiClient = await getTenantAIClient(tenantId);
+  const aiClient = await getTenantAIClient(tenantId, true);
   const previewText = fullText.slice(0, 6000); // Send first 6k chars for token safety
 
   const prompt = `You are an expert insurance assistant.

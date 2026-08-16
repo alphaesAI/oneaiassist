@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       ];
     } else {
       try {
-        const aiClient = await getTenantAIClient(tenantCtx.tenantId);
+        const aiClient = await getTenantAIClient(tenantCtx.tenantId, true);
         const aiResponse = await aiClient.generateChat([
           {
             role: 'system',
