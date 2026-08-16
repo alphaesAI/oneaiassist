@@ -52,24 +52,41 @@ The Template Manager enables administrators to create, test, and manage WhatsApp
 
 ---
 
-## 3. Broadcast Campaign Center (`/dashboard/broadcast`)
+## 3. Campaigns Center (`/dashboard/campaigns`)
 
-The Broadcast Center allows admins to launch targeted bulk WhatsApp messaging campaigns.
+The Campaigns Center (previously *Broadcast*) allows admins to launch targeted bulk WhatsApp template messaging campaigns.
 
-![Broadcast Center](./images/broadcast_center.png)
+![Campaigns Center](./images/broadcast_center.png)
 
 ### Key Workflows
-- **Template Selection**: Choose from any active `APPROVED` WhatsApp template.
-- **Audience Segmentation**: Filter recipients:
-  - *By Customer Tag* (e.g. `Health`, `Buy Interest`, `Agent License`)
-  - *By Pipeline Stage* (e.g. `New Lead`, `Qualified`, `Negotiation`)
-  - *By Date Range* (e.g. Last 7 Days, This Month)
-- **Scheduling**: Send immediately or schedule for a future date/time.
-- **Verified Fixes**: Resolved SSR hydration time string mismatches (`10:31 pm` vs `10:31 PM`) and label input toggle event bubbling conflicts.
+- **Template Selection**: Choose from active `APPROVED` WhatsApp templates.
+- **Audience Segmentation**: Filter recipients by customer tags (e.g., `VIP`, `Renewal Due`) or CRM pipeline stages (e.g., `Qualified`).
+- **Outbound Scheduling**: Dispatch messages immediately or set up a future date/time.
 
 ---
 
-## 4. Lead Pipeline Management (`/dashboard/leads`)
+## 4. Digital Marketing Suite (`/dashboard/marketing`)
+
+The Digital Marketing Suite provides a visual multi-channel space to compose organic social media posts or paid advertisement creatives, run pre-flight compliance audits, and view publishing calendars and analytics.
+
+### Console Sections
+1. **Social Posts (AI Composer)**:
+   - **Create Post**: Multi-channel composer for Facebook, Instagram, LinkedIn, and YouTube.
+   - **AI Copywriter**: Optimize captions tailored for each platform.
+   - **Pre-Flight Compliance Audit**: Scans copy for healthcare/PII compliance and HIPAA policies, predicting expected click-through rate (CTR).
+   - **Social Post Status Tabs**: View drafts, scheduled posts, published posts, and execution failures separately.
+2. **Visual Content Calendar**:
+   - Monthly grid dashboard showing scheduled and published posts timezone-safely.
+3. **Social Integrations**:
+   - Encrypted OAuth connectors for Facebook Pages, Instagram Business, LinkedIn Profiles, and YouTube Channels.
+4. **History & Analytics**:
+   - **Metrics Tracker**: cumulative reach, expected click-through, and ad budget spent.
+   - **Analytical Graphs**: Reach growth timelines and channel splits.
+   - **Social Post Logs**: Searchable tabular log list of past marketing assets.
+
+---
+
+## 5. Lead Pipeline Management (`/dashboard/leads`)
 
 The Lead Pipeline provides real-time visibility into customer sales opportunities from initial contact to policy issuance.
 
@@ -92,7 +109,7 @@ The Lead Pipeline provides real-time visibility into customer sales opportunitie
 
 ---
 
-## 5. Customers Directory & 360° Profile View (`/dashboard/customers`)
+## 6. Customers Directory & 360° Profile View (`/dashboard/customers`)
 
 The Customer Directory maintains all customer contact records, opt-in consent statuses, and historical policy engagements.
 
@@ -106,7 +123,7 @@ The Customer Directory maintains all customer contact records, opt-in consent st
 
 ---
 
-## 6. Bot Configuration, Flow Builder & RAG Knowledge Base (`/dashboard/bot-config`)
+## 7. AI & Bot Configuration (`/dashboard/ai-bot`)
 
 The Bot Config workspace gives administrators complete control over AI provider settings, visual flowchart intake builder, RAG knowledge base document indexing, escalation triggers, and AI guardrails.
 
@@ -143,7 +160,7 @@ Administrators can upload policy PDFs or choose from pre-loaded sample policy do
 
 ---
 
-## 7. Analytics & Reports (`/dashboard/analytics`)
+## 8. Analytics & Reports (`/dashboard/analytics`)
 
 The Analytics & Reports module provides real-time business intelligence and performance monitoring for agency administrators.
 
@@ -171,7 +188,7 @@ For the dedicated deep-dive guide, see [analytics_and_reports_guide.md](file:///
 
 ---
 
-## 8. Application Startup & Developer Guide
+## 9. Application Startup & Developer Guide
 
 ### Environment Prerequisites
 - Node.js v18+

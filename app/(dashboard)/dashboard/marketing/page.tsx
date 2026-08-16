@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Sparkles,
   Upload,
@@ -19,6 +20,13 @@ import {
   Sliders,
   DollarSign,
   Layers,
+  ChevronLeft,
+  ChevronRight,
+  TrendingUp,
+  BarChart3,
+  Check,
+  AlertCircle,
+  Megaphone
 } from 'lucide-react';
 
 const FacebookIcon = ({ className }: { className?: string }) => (
@@ -45,11 +53,30 @@ const YoutubeIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-export default function DigitalMarketingSuitePage() {
+function DigitalMarketingSuitePageInner() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'compose' | 'integrations' | 'history'>('compose');
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-  // COMPOSE TAB STATE
+  // Root Navigation Tabs: social-posts | calendar | integrations | analytics
+  const rawTab = searchParams.get('tab');
+  const activeTab = rawTab === 'campaigns' ? 'social-posts' : (rawTab as 'social-posts' | 'calendar' | 'integrations' | 'analytics') || 'social-posts';
+
+  const setActiveTab = (tab: string) => {
+    router.push(`/dashboard/marketing?tab=${tab}`);
+  };
+
+  // Redirect ?tab=campaigns automatically to ?tab=social-posts
+  useEffect(() => {
+    if (searchParams.get('tab') === 'campaigns') {
+      router.replace('/dashboard/marketing?tab=social-posts');
+    }
+  }, [searchParams, router]);
+
+  // Social Posts sub-tabs: create-post | DRAFT | SCHEDULED | SUCCESS | FAILED
+  const [socialPostSubTab, setSocialPostSubTab] = useState<'create-post' | 'DRAFT' | 'SCHEDULED' | 'SUCCESS' | 'FAILED'>('create-post');
+
+  // COMPOSE / CREATE STATE
   const [campaignName, setCampaignName] = useState('');
   const [campaignType, setCampaignType] = useState<'ORGANIC' | 'PAID'>('ORGANIC');
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['facebook', 'instagram']);
@@ -79,10 +106,13 @@ export default function DigitalMarketingSuitePage() {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleDateTime, setScheduleDateTime] = useState('');
 
-  // HISTORY TAB STATE
+  // History Tab Filter limits
   const [historyPlatformFilter, setHistoryPlatformFilter] = useState('ALL');
   const [historyStatusFilter, setHistoryStatusFilter] = useState('ALL');
   const [expandedAbTestId, setExpandedAbTestId] = useState<string | null>(null);
+
+  // Calendar Year/Month State
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   // 1. Fetch History Campaigns
   const { data: historyData, isLoading: historyLoading } = useQuery({
@@ -139,14 +169,14 @@ export default function DigitalMarketingSuitePage() {
     },
   });
 
-  // Handle Platform Toggle Selection
+  // Toggle platform select state
   const togglePlatform = (plat: string) => {
     setSelectedPlatforms((prev) =>
       prev.includes(plat) ? prev.filter((p) => p !== plat) : [...prev, plat]
     );
   };
 
-  // Handle Media File Drag/Drop or Select
+  // Upload asset handler
   const handleMediaUpload = async (file: File) => {
     setMediaFileName(file.name);
     const formData = new FormData();
@@ -166,7 +196,7 @@ export default function DigitalMarketingSuitePage() {
     }
   };
 
-  // Handle AI Caption Optimization
+  // AI Copy Optimizer handler
   const handleAiOptimize = async () => {
     if (!caption.trim()) return;
     setIsOptimizing(true);
@@ -191,7 +221,7 @@ export default function DigitalMarketingSuitePage() {
     }
   };
 
-  // Handle AI Pre-Flight Audit
+  // AI Preflight Audit execution
   const handleRunAudit = async () => {
     if (!caption.trim()) return;
     setIsAuditing(true);
@@ -215,10 +245,10 @@ export default function DigitalMarketingSuitePage() {
     }
   };
 
-  // Handle Create / Save Campaign (Draft, Schedule, Publish Now)
+  // Save / Post campaign dispatcher
   const handleSaveCampaign = async (status: 'DRAFT' | 'SCHEDULED' | 'PENDING') => {
     if (!campaignName.trim() || !caption.trim()) {
-      alert('Please enter a campaign name and caption.');
+      alert('Please enter a post title and caption.');
       return;
     }
 
@@ -251,12 +281,11 @@ export default function DigitalMarketingSuitePage() {
       const createdCampaignId = data.campaign.id;
 
       if (status === 'PENDING' && createdCampaignId) {
-        // Trigger background publishing job
         await publishMutation.mutateAsync({ campaignId: createdCampaignId });
       }
 
       queryClient.invalidateQueries({ queryKey: ['marketing-campaigns'] });
-      setActiveTab('history');
+      setSocialPostSubTab('DRAFT');
       setShowScheduleModal(false);
     } catch (err: any) {
       alert(err.message || 'Error saving campaign');
@@ -271,447 +300,864 @@ export default function DigitalMarketingSuitePage() {
     }
   };
 
+  // Helper: Timezone-Safe ISO Date Matching
+  const isSameDayISO = (dateStr: string | null | undefined, compareDate: Date) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d.getFullYear() === compareDate.getFullYear() &&
+           d.getMonth() === compareDate.getMonth() &&
+           d.getDate() === compareDate.getDate();
+  };
+
+  // RENDER DYNAMIC HISTORICAL DATA TABLE
+  const renderCampaignsTable = (filteredCampaigns: any[]) => {
+    if (!filteredCampaigns || filteredCampaigns.length === 0) {
+      return (
+        <div className="p-8 text-center text-xs text-gray-500 bg-white border border-[#c3c6d7] rounded-xl">
+          No posts found in this status group. Click &quot;Create Post&quot; to build a new one.
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-white rounded-xl border border-[#c3c6d7] overflow-hidden shadow-sm text-left">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-gray-50 text-gray-600 border-b border-gray-200 font-semibold uppercase tracking-wider">
+              <tr>
+                <th className="p-4">Post Title</th>
+                <th className="p-4">Platforms</th>
+                <th className="p-4">Type</th>
+                <th className="p-4">Status</th>
+                <th className="p-4">Date</th>
+                <th className="p-4">Est. Reach</th>
+                <th className="p-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 font-medium">
+              {filteredCampaigns.map((item: any) => {
+                const isExpanded = expandedAbTestId === item.id;
+                const hasAbVariants = item.abTestVariants && item.abTestVariants.length > 0;
+
+                return (
+                  <React.Fragment key={item.id}>
+                    <tr className="hover:bg-gray-50/80 transition">
+                      <td className="p-4 font-bold text-gray-900">
+                        <div className="flex items-center gap-2">
+                          {hasAbVariants && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedAbTestId(isExpanded ? null : item.id)}
+                              className="p-1 text-gray-500 hover:text-gray-900"
+                            >
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </button>
+                          )}
+                          <span>{item.name}</span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 font-normal truncate max-w-md mt-0.5">
+                          {item.caption}
+                        </p>
+                      </td>
+
+                      <td className="p-4">
+                        <div className="flex flex-wrap gap-1">
+                          {item.platforms?.map((p: string) => (
+                            <span
+                              key={p}
+                              className="px-2 py-0.5 bg-blue-50 text-blue-800 rounded font-semibold text-[10px] uppercase"
+                            >
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+
+                      <td className="p-4">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                            item.type === 'PAID'
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {item.type}
+                        </span>
+                      </td>
+
+                      <td className="p-4">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                            item.status === 'SUCCESS'
+                              ? 'bg-green-100 text-green-800'
+                              : item.status === 'PUBLISHING'
+                              ? 'bg-blue-100 text-blue-800 animate-pulse'
+                              : item.status === 'FAILED'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {item.status === 'PUBLISHING' && <RotateCw className="w-3 h-3 animate-spin" />}
+                          {item.status === 'SUCCESS' ? 'PUBLISHED' : item.status}
+                        </span>
+                      </td>
+
+                      <td className="p-4 text-gray-600">
+                        {item.publishedAt
+                          ? new Date(item.publishedAt).toLocaleDateString()
+                          : item.scheduledAt
+                          ? new Date(item.scheduledAt).toLocaleDateString()
+                          : 'Draft'}
+                      </td>
+
+                      <td className="p-4 font-semibold text-gray-900">
+                        {item.reach ? item.reach.toLocaleString() : '0'}
+                      </td>
+
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {item.status === 'FAILED' && (
+                            <button
+                              type="button"
+                              onClick={() => publishMutation.mutate({ campaignId: item.id, action: 'retry' })}
+                              className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold transition flex items-center gap-1"
+                            >
+                              <RotateCw className="w-3 h-3" />
+                              Retry
+                            </button>
+                          )}
+                          <a
+                            href={`/dashboard/marketing`}
+                            className="p-1.5 text-gray-500 hover:text-[#004ac6] transition"
+                            title="View Post Details"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {isExpanded && hasAbVariants && (
+                      <tr className="bg-blue-50/40">
+                        <td colSpan={7} className="p-4">
+                          <div className="p-4 bg-white rounded-lg border border-blue-200 space-y-3">
+                            <h4 className="text-xs font-bold text-[#1B4B91] uppercase tracking-wider">
+                              A/B Test Variant Performance Comparison
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {item.abTestVariants.map((varItem: any, idx: number) => (
+                                <div key={varItem.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs">
+                                  <div className="flex justify-between font-bold text-gray-900 mb-1">
+                                    <span>Variant {String.fromCharCode(65 + idx)}</span>
+                                    <span className="text-[#004ac6]">Reach: {varItem.reach?.toLocaleString()}</span>
+                                  </div>
+                                  <p className="text-gray-600 line-clamp-2">{varItem.caption}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // MONTHLY GRID CALENDAR GENERATION LOGIC
+  const renderCalendar = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+    const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+
+    const cells: React.ReactNode[] = [];
+    
+    // Empty cells at start of month
+    for (let i = 0; i < firstDay; i++) {
+      cells.push(<div key={`empty-${i}`} className="min-h-[110px] bg-slate-50/50 border border-slate-100 rounded-lg" />);
+    }
+
+    // Days cells
+    for (let d = 1; d <= totalDays; d++) {
+      const cellDate = new Date(year, month, d);
+      const matched = (historyData?.campaigns || []).filter((c: any) =>
+        isSameDayISO(c.scheduledAt || c.publishedAt, cellDate)
+      );
+
+      cells.push(
+        <div
+          key={`day-${d}`}
+          className="min-h-[110px] p-2 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow flex flex-col justify-between"
+        >
+          <span className="text-xs font-bold text-gray-800 self-end bg-gray-100 px-1.5 py-0.5 rounded">
+            {d}
+          </span>
+          <div className="flex-1 mt-1 space-y-1 overflow-y-auto max-h-[75px] scrollbar-none">
+            {matched.map((c: any) => (
+              <div
+                key={c.id}
+                title={`${c.name} (${c.status})`}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-bold truncate border ${
+                  c.status === 'SUCCESS'
+                    ? 'bg-green-50 border-green-200 text-green-800'
+                    : c.status === 'SCHEDULED'
+                    ? 'bg-blue-50 border-blue-200 text-blue-800'
+                    : c.status === 'FAILED'
+                    ? 'bg-red-50 border-red-200 text-red-800'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                }`}
+              >
+                {c.name}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-white rounded-xl border border-[#c3c6d7] p-6 shadow-sm space-y-4 text-left font-sans">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-[#004ac6]" />
+            <h2 className="text-lg font-bold text-[#1B4B91]">Social Posting Calendar</h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={prevMonth}
+              className="p-1.5 hover:bg-slate-100 rounded-full border border-gray-200 text-gray-600 transition"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              {monthNames[month]} {year}
+            </span>
+            <button
+              onClick={nextMonth}
+              className="p-1.5 hover:bg-slate-100 rounded-full border border-gray-200 text-gray-600 transition"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Days of Week Header */}
+        <div className="grid grid-cols-7 gap-2 text-center text-[10px] font-extrabold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-2">
+          <div>Sun</div>
+          <div>Mon</div>
+          <div>Tue</div>
+          <div>Wed</div>
+          <div>Thu</div>
+          <div>Fri</div>
+          <div>Sat</div>
+        </div>
+
+        {/* Grid Cells */}
+        <div className="grid grid-cols-7 gap-2">
+          {cells}
+        </div>
+      </div>
+    );
+  };
+
+  // ANALYTICS PERFORMANCE SUMMARY
+  const renderAnalytics = () => {
+    const list = historyData?.campaigns || [];
+    
+    // KPI Math
+    const totalReach = list.reduce((sum: number, c: any) => sum + (c.reach || 0), 0);
+    const totalBudget = list.reduce((sum: number, c: any) => sum + (c.budget || 0), 0);
+    
+    const countWithCtr = list.filter((c: any) => c.ctrPrediction).length;
+    const averageCtr = countWithCtr > 0 
+      ? (list.reduce((sum: number, c: any) => {
+          const val = c.ctrPrediction === 'HIGH' ? 8.5 : c.ctrPrediction === 'MEDIUM' ? 4.8 : 1.8;
+          return sum + val;
+        }, 0) / countWithCtr).toFixed(1)
+      : '0.0';
+
+    // Reach Over Time graph data
+    const reachData = [...list]
+      .filter((c: any) => c.reach > 0)
+      .reverse()
+      .slice(-6); // Last 6 campaigns
+
+    return (
+      <div className="space-y-6 text-left font-sans">
+        {/* Metric Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="p-5 bg-white rounded-xl border border-[#c3c6d7] shadow-sm flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Cumulative Post Reach</span>
+              <span className="text-2xl font-extrabold text-[#1c1b1f] mt-1 block">{totalReach.toLocaleString()}</span>
+            </div>
+            <div className="p-2.5 bg-blue-50 text-blue-700 rounded-xl border border-blue-100">
+              <TrendingUp className="w-6 h-6" />
+            </div>
+          </div>
+
+          <div className="p-5 bg-white rounded-xl border border-[#c3c6d7] shadow-sm flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Target CTR Prediction</span>
+              <span className="text-2xl font-extrabold text-[#1c1b1f] mt-1 block">{averageCtr}%</span>
+            </div>
+            <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100">
+              <Sparkles className="w-6 h-6" />
+            </div>
+          </div>
+
+          <div className="p-5 bg-white rounded-xl border border-[#c3c6d7] shadow-sm flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total Spent (Paid Ads)</span>
+              <span className="text-2xl font-extrabold text-[#1c1b1f] mt-1 block">${totalBudget.toLocaleString()}</span>
+            </div>
+            <div className="p-2.5 bg-purple-50 text-purple-700 rounded-xl border border-purple-100">
+              <DollarSign className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+
+        {/* Charts & Trends panel */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Trend chart */}
+          <div className="p-5 bg-white rounded-xl border border-[#c3c6d7] shadow-sm space-y-4">
+            <h3 className="text-xs font-bold text-[#1B4B91] uppercase tracking-wider flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-[#004ac6]" />
+              Social Post Reach Analytics
+            </h3>
+            {reachData.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-xs text-gray-500">
+                Publish posts to generate reach trend statistics.
+              </div>
+            ) : (
+              <div className="h-48 flex flex-col justify-between">
+                <div className="flex-1 flex items-end justify-between gap-4 px-2">
+                  {reachData.map((c: any) => {
+                    const maxReach = Math.max(...reachData.map((x: any) => x.reach)) || 1;
+                    const heightPercent = Math.max(10, (c.reach / maxReach) * 80);
+                    return (
+                      <div key={c.id} className="flex-1 flex flex-col items-center gap-2 group relative">
+                        <span className="text-[9px] font-bold text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity absolute -top-4 bg-gray-900 text-white rounded px-1">
+                          {c.reach.toLocaleString()}
+                        </span>
+                        <div
+                          style={{ height: `${heightPercent}%` }}
+                          className="w-full bg-[#004ac6] hover:bg-[#003da3] rounded-t transition-all cursor-pointer"
+                        />
+                        <span className="text-[9px] font-semibold text-gray-500 truncate w-full text-center">
+                          {c.name}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Social split chart */}
+          <div className="p-5 bg-white rounded-xl border border-[#c3c6d7] shadow-sm space-y-4">
+            <h3 className="text-xs font-bold text-[#1B4B91] uppercase tracking-wider flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-[#004ac6]" />
+              Platform Share Split Distribution
+            </h3>
+            <div className="h-48 flex flex-col justify-center space-y-3">
+              {['facebook', 'instagram', 'linkedin', 'youtube'].map((p) => {
+                const count = list.filter((c: any) => c.platforms?.includes(p)).length;
+                const total = list.length || 1;
+                const percentage = Math.round((count / total) * 100);
+                return (
+                  <div key={p} className="space-y-1 text-xs">
+                    <div className="flex justify-between font-bold text-gray-700 uppercase text-[10px]">
+                      <span>{p}</span>
+                      <span>{count} posts ({percentage}%)</span>
+                    </div>
+                    <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        style={{ width: `${percentage}%` }}
+                        className="h-full bg-blue-800 rounded-full transition-all"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Granular campaign logs table */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-[#1B4B91] uppercase tracking-wider flex items-center gap-2">
+              <Layers className="w-4 h-4 text-[#004ac6]" />
+              Detailed Post History Log
+            </h3>
+          </div>
+          {renderCampaignsTable(list)}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-6 font-sans">
-      {/* Top Header */}
+    <div className="space-y-6 font-sans text-left">
+      {/* Header Info */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#c3c6d7]/40 pb-5">
         <div>
           <h1 className="text-2xl font-bold text-[#1B4B91] tracking-tight flex items-center gap-2">
             <span className="material-symbols-outlined text-[#004ac6]">ads_click</span>
             Digital Marketing Suite
           </h1>
-          <p className="text-sm text-[#44474e]">
-            Compose multi-channel healthcare social campaigns, run AI Pre-Flight compliance audits, and publish across connected platforms.
+          <p className="text-xs text-gray-500 mt-1">
+            Compose and target healthcare posts, perform AI compliance preflight audits, and track unified social analytics.
           </p>
         </div>
       </div>
 
-      {/* Top 3 Sub-Tabs Navigation */}
-      <div className="flex items-center gap-2 border-b border-[#c3c6d7]">
-        <button
-          onClick={() => setActiveTab('compose')}
-          className={`px-5 py-3 font-semibold text-sm transition-all border-b-2 flex items-center gap-2 ${
-            activeTab === 'compose'
-              ? 'border-[#004ac6] text-[#004ac6] bg-white rounded-t-lg'
-              : 'border-transparent text-gray-600 hover:text-[#1B4B91]'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-[#004ac6]" />
-          Compose
-        </button>
-        <button
-          onClick={() => setActiveTab('integrations')}
-          className={`px-5 py-3 font-semibold text-sm transition-all border-b-2 flex items-center gap-2 ${
-            activeTab === 'integrations'
-              ? 'border-[#004ac6] text-[#004ac6] bg-white rounded-t-lg'
-              : 'border-transparent text-gray-600 hover:text-[#1B4B91]'
-          }`}
-        >
-          <Layers className="w-4 h-4 text-[#004ac6]" />
-          Integrations
-        </button>
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`px-5 py-3 font-semibold text-sm transition-all border-b-2 flex items-center gap-2 ${
-            activeTab === 'history'
-              ? 'border-[#004ac6] text-[#004ac6] bg-white rounded-t-lg'
-              : 'border-transparent text-gray-600 hover:text-[#1B4B91]'
-          }`}
-        >
-          <Calendar className="w-4 h-4 text-[#004ac6]" />
-          History
-        </button>
+      {/* Primary Tab Navigation */}
+      <div className="flex items-center gap-1 border-b border-[#c3c6d7] overflow-x-auto pb-px">
+        {[
+          { id: 'social-posts' as const, label: 'Social Posts', icon: Megaphone },
+          { id: 'calendar' as const, label: 'Calendar', icon: Calendar },
+          { id: 'integrations' as const, label: 'Integrations', icon: Layers },
+          { id: 'analytics' as const, label: 'History & Analytics', icon: BarChart3 },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-5 py-3 text-xs font-bold whitespace-nowrap transition border-b-2 ${
+                isActive
+                  ? 'border-[#004ac6] text-[#004ac6] bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-slate-50'
+              }`}
+            >
+              <Icon className={`w-4 h-4 ${isActive ? 'text-[#004ac6]' : 'text-gray-400'}`} />
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* TAB 1: COMPOSE TAB */}
-      {activeTab === 'compose' && (
+      {/* TAB 1: SOCIAL POSTS HUB */}
+      {activeTab === 'social-posts' && (
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-[#c3c6d7] p-6 shadow-sm space-y-6">
-            {/* Campaign Name & Type Toggle */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
-                  Campaign Name *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Q3 Individual Health Plan Enrollment Campaign"
-                  value={campaignName}
-                  onChange={(e) => setCampaignName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:bg-white focus:border-[#004ac6] focus:ring-1 focus:ring-[#004ac6] outline-none transition"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
-                  Campaign Type
-                </label>
-                <div className="grid grid-cols-2 p-1 bg-gray-100 rounded-lg border border-gray-200">
-                  <button
-                    type="button"
-                    onClick={() => setCampaignType('ORGANIC')}
-                    className={`py-1.5 text-xs font-semibold rounded-md transition ${
-                      campaignType === 'ORGANIC'
-                        ? 'bg-white text-[#1B4B91] shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Organic Post
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCampaignType('PAID')}
-                    className={`py-1.5 text-xs font-semibold rounded-md transition ${
-                      campaignType === 'PAID'
-                        ? 'bg-[#1B4B91] text-white shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Paid Ad
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Platform Selector Row (Multi-select) */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
-                Target Social Platforms (Multi-Select)
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { id: 'facebook', name: 'Facebook', icon: FacebookIcon, color: 'text-blue-600' },
-                  { id: 'instagram', name: 'Instagram', icon: InstagramIcon, color: 'text-pink-600' },
-                  { id: 'linkedin', name: 'LinkedIn', icon: LinkedinIcon, color: 'text-blue-700' },
-                  { id: 'youtube', name: 'YouTube', icon: YoutubeIcon, color: 'text-red-600' },
-                ].map((item) => {
-                  const isSelected = selectedPlatforms.includes(item.id);
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => togglePlatform(item.id)}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-semibold transition ${
-                        isSelected
-                          ? 'border-[#004ac6] bg-[#004ac6]/10 text-[#004ac6] ring-1 ring-[#004ac6]'
-                          : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      <Icon className={`w-5 h-5 ${item.color}`} />
-                      <span>{item.name}</span>
-                      {isSelected && <CheckCircle2 className="w-4 h-4 text-[#004ac6] ml-auto" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Media Upload Area */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
-                Campaign Media & Creative Assets
-              </label>
-              <label className="border-2 border-dashed border-gray-300 hover:border-[#1B4B91] bg-gray-50/50 hover:bg-gray-50 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition text-center group">
-                <input
-                  type="file"
-                  accept="image/*,video/*"
-                  onChange={(e) => e.target.files?.[0] && handleMediaUpload(e.target.files[0])}
-                  className="hidden"
-                />
-                <Upload className="w-8 h-8 text-gray-400 group-hover:text-[#1B4B91] mb-2 transition" />
-                <p className="text-sm font-medium text-gray-700">
-                  Drag and drop campaign images, videos, or reels here
-                </p>
-                <p className="text-xs text-gray-500 mt-1">Supports PNG, JPG, MP4, MOV (Max 50MB)</p>
-              </label>
-
-              {mediaFileName && (
-                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-900 font-medium">
-                  <span className="truncate">Attached: {mediaFileName}</span>
-                  <span className="text-[#004ac6] font-semibold">Ready for R2 Storage</span>
-                </div>
-              )}
-            </div>
-
-            {/* Caption Writer & AI Optimize */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
-                  Caption & Copy Writer
-                </label>
-                <button
-                  type="button"
-                  onClick={handleAiOptimize}
-                  disabled={isOptimizing || !caption.trim()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#004ac6] hover:bg-[#003da3] text-white text-xs font-semibold rounded-md shadow-sm disabled:opacity-50 transition"
-                >
-                  <Sparkles className={`w-3.5 h-3.5 ${isOptimizing ? 'animate-spin' : ''}`} />
-                  {isOptimizing ? 'Rewriting with AI...' : 'AI Optimize Copy'}
-                </button>
-              </div>
-              <textarea
-                rows={5}
-                placeholder="Write your campaign caption or promotional message here..."
-                value={caption}
-                onChange={(e) => {
-                  setCaption(e.target.value);
-                  setAuditData(null); // Reset audit when caption changes
-                }}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:bg-white focus:border-[#004ac6] focus:ring-1 focus:ring-[#004ac6] outline-none transition"
-              />
-            </div>
-
-            {/* Paid Options Panel (Conditional) */}
-            {campaignType === 'PAID' && (
-              <div className="p-5 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 rounded-xl border border-blue-200 space-y-4">
-                <h3 className="text-sm font-bold text-[#1B4B91] flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-[#004ac6]" />
-                  Paid Advertising & Audience Targeting Controls
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Campaign Budget ($)
-                    </label>
-                    <div className="relative">
-                      <DollarSign className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                      <input
-                        type="number"
-                        value={budget}
-                        onChange={(e) => setBudget(e.target.value)}
-                        className="w-full pl-8 pr-4 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none focus:border-[#004ac6]"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Target Age Range
-                    </label>
-                    <input
-                      type="text"
-                      value={ageRange}
-                      onChange={(e) => setAgeRange(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none focus:border-[#004ac6]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Geographic Location
-                    </label>
-                    <input
-                      type="text"
-                      value={location}
-                      onChange={(e) => setLocation(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none focus:border-[#004ac6]"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Audience Interest Chips
-                  </label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {interestTags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-blue-200 text-blue-900 text-xs font-semibold rounded-full shadow-sm"
-                      >
-                        {tag}
-                        <button
-                          type="button"
-                          onClick={() => setInterestTags(interestTags.filter((t) => t !== tag))}
-                          className="hover:text-red-600 text-gray-400"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Add interest tag (e.g. Wellness)..."
-                      value={newTagInput}
-                      onChange={(e) => setNewTagInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addInterestTag())}
-                      className="flex-1 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6]"
-                    />
-                    <button
-                      type="button"
-                      onClick={addInterestTag}
-                      className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-semibold rounded-lg transition"
-                    >
-                      Add Tag
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Run Pre-Flight Audit Button */}
-            {!auditData && (
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleRunAudit}
-                  disabled={isAuditing}
-                  className="w-full py-3 bg-[#1B4B91] hover:bg-[#14376c] text-white font-semibold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 transition cursor-pointer"
-                >
-                  <ShieldCheck className={`w-4 h-4 ${isAuditing ? 'animate-spin' : ''}`} />
-                  {isAuditing ? 'Running Healthcare & Insurance Compliance Audit...' : 'Run AI Pre-Flight Audit'}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* AI Pre-Flight Audit Results Card */}
-          {auditData && (
-            <div className="bg-white rounded-xl border border-[#c3c6d7] p-6 shadow-sm space-y-6">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                <h3 className="text-base font-bold text-[#1B4B91] flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-[#004ac6]" />
-                  AI Pre-Flight Compliance Audit Report
-                </h3>
-                <span className="text-xs text-gray-500 font-mono">Policy Spec: Healthcare & Insurance Ad Standards v2.4</span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Circular Compliance Score Gauge */}
-                <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-xl border border-gray-200 text-center">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                    Compliance Score
-                  </span>
-                  <div className="relative w-24 h-24 flex items-center justify-center rounded-full border-4 border-[#004ac6] bg-white shadow-inner">
-                    <span className="text-3xl font-extrabold text-[#1B4B91]">{auditData.complianceScore}</span>
-                    <span className="text-xs text-gray-400 font-bold font-mono">/100</span>
-                  </div>
-                  <span className="mt-3 text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-0.5 rounded-full">
-                    High Ad Quality
-                  </span>
-                </div>
-
-                {/* CTR Prediction & Recommendations */}
-                <div className="md:col-span-2 space-y-4">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      CTR Prediction:
-                    </span>
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-bold ${
-                        auditData.ctrPrediction === 'HIGH'
-                          ? 'bg-green-100 text-green-800'
-                          : auditData.ctrPrediction === 'MEDIUM'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {auditData.ctrPrediction} EXPECTED CLICK-THROUGH
-                    </span>
-                  </div>
-
-                  {/* Checklist */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      Healthcare Insurance Content Policy Check:
-                    </span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {auditData.checklist.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs font-medium text-gray-700 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                          {item.pass ? (
-                            <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-red-600 shrink-0" />
-                          )}
-                          <span className="truncate">{item.rule}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* AI Recommendations */}
-                  <div>
-                    <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider block mb-1">
-                      AI Compliance Recommendations:
-                    </span>
-                    <ul className="list-disc list-inside text-xs text-gray-600 space-y-1">
-                      {auditData.recommendations.map((rec, i) => (
-                        <li key={i}>{rec}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              {/* Large Status Verdict Banner */}
-              <div
-                className={`p-4 rounded-xl text-center font-extrabold text-lg flex items-center justify-center gap-3 ${
-                  auditData.auditResult === 'PASS'
-                    ? 'bg-green-600 text-white'
-                    : auditData.auditResult === 'REVIEW'
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-red-600 text-white'
+          {/* Sub-tabs bar */}
+          <div className="flex items-center gap-1 border-b border-gray-200 pb-px overflow-x-auto">
+            {[
+              { id: 'create-post' as const, label: 'Create Post' },
+              { id: 'DRAFT' as const, label: 'Drafts' },
+              { id: 'SCHEDULED' as const, label: 'Scheduled' },
+              { id: 'SUCCESS' as const, label: 'Published' },
+              { id: 'FAILED' as const, label: 'Failed' },
+            ].map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => setSocialPostSubTab(sub.id)}
+                className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap border-b-2 transition ${
+                  socialPostSubTab === sub.id
+                    ? 'border-[#004ac6] text-[#004ac6]'
+                    : 'border-transparent text-gray-500 hover:text-gray-900'
                 }`}
               >
-                {auditData.auditResult === 'PASS' && <CheckCircle2 className="w-6 h-6" />}
-                {auditData.auditResult === 'REVIEW' && <AlertTriangle className="w-6 h-6" />}
-                {auditData.auditResult === 'BLOCK' && <XCircle className="w-6 h-6" />}
-                <span>PRE-FLIGHT AUDIT VERDICT: {auditData.auditResult}</span>
+                {sub.label}
+              </button>
+            ))}
+          </div>
+
+          {socialPostSubTab === 'create-post' ? (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-[#c3c6d7] p-6 shadow-sm space-y-6">
+                {/* Post Name */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
+                      Post / Campaign Title *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Q3 Health Plan Enrollment Social Post"
+                      value={campaignName}
+                      onChange={(e) => setCampaignName(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-xs focus:bg-white focus:border-[#004ac6] outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
+                      Campaign Type
+                    </label>
+                    <div className="grid grid-cols-2 p-1 bg-gray-100 rounded-lg border border-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => setCampaignType('ORGANIC')}
+                        className={`py-1.5 text-[11px] font-semibold rounded-md transition ${
+                          campaignType === 'ORGANIC'
+                            ? 'bg-white text-[#1B4B91] shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Organic Post
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCampaignType('PAID')}
+                        className={`py-1.5 text-[11px] font-semibold rounded-md transition ${
+                          campaignType === 'PAID'
+                            ? 'bg-[#1B4B91] text-white shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Paid Ad
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Platforms Row */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
+                    Target Social Platforms (Multi-Select)
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { id: 'facebook', name: 'Facebook', icon: FacebookIcon, color: 'text-blue-600' },
+                      { id: 'instagram', name: 'Instagram', icon: InstagramIcon, color: 'text-pink-600' },
+                      { id: 'linkedin', name: 'LinkedIn', icon: LinkedinIcon, color: 'text-blue-700' },
+                      { id: 'youtube', name: 'YouTube', icon: YoutubeIcon, color: 'text-red-600' },
+                    ].map((item) => {
+                      const isSelected = selectedPlatforms.includes(item.id);
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => togglePlatform(item.id)}
+                          className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-xs font-semibold transition ${
+                            isSelected
+                              ? 'border-[#004ac6] bg-[#004ac6]/10 text-[#004ac6] ring-1 ring-[#004ac6]'
+                              : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          <Icon className={`w-5 h-5 ${item.color}`} />
+                          <span>{item.name}</span>
+                          {isSelected && <CheckCircle2 className="w-4 h-4 text-[#004ac6] ml-auto" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Upload File */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
+                    Post Media & Creative Assets
+                  </label>
+                  <label className="border-2 border-dashed border-gray-300 hover:border-[#1B4B91] bg-gray-50/50 hover:bg-gray-50 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition text-center group">
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      onChange={(e) => e.target.files?.[0] && handleMediaUpload(e.target.files[0])}
+                      className="hidden"
+                    />
+                    <Upload className="w-8 h-8 text-gray-400 group-hover:text-[#1B4B91] mb-2 transition" />
+                    <p className="text-xs font-medium text-gray-700">
+                      Drag and drop campaign images, videos, or reels here
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-1">Supports PNG, JPG, MP4, MOV (Max 50MB)</p>
+                  </label>
+
+                  {mediaFileName && (
+                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-900 font-medium">
+                      <span className="truncate">Attached: {mediaFileName}</span>
+                      <span className="text-[#004ac6] font-semibold">Ready for Upload</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Caption text */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Caption & Copy Writer
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAiOptimize}
+                      disabled={isOptimizing || !caption.trim()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#004ac6] hover:bg-[#003da3] text-white text-[10px] font-semibold rounded-md shadow-sm disabled:opacity-50 transition"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${isOptimizing ? 'animate-spin' : ''}`} />
+                      {isOptimizing ? 'Rewriting with AI...' : 'AI Optimize Copy'}
+                    </button>
+                  </div>
+                  <textarea
+                    rows={5}
+                    placeholder="Write your campaign caption or promotional message here..."
+                    value={caption}
+                    onChange={(e) => {
+                      setCaption(e.target.value);
+                      setAuditData(null);
+                    }}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-xs focus:bg-white focus:border-[#004ac6] outline-none transition"
+                  />
+                </div>
+
+                {/* Paid Options */}
+                {campaignType === 'PAID' && (
+                  <div className="p-5 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 rounded-xl border border-blue-200 space-y-4">
+                    <h3 className="text-xs font-bold text-[#1B4B91] flex items-center gap-2">
+                      <Sliders className="w-4 h-4 text-[#004ac6]" />
+                      Paid Advertising & Audience Targeting Controls
+                    </h3>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Campaign Budget ($)
+                        </label>
+                        <div className="relative">
+                          <DollarSign className="w-4 h-4 text-gray-400 absolute left-3 top-2" />
+                          <input
+                            type="number"
+                            value={budget}
+                            onChange={(e) => setBudget(e.target.value)}
+                            className="w-full pl-8 pr-4 py-1.5 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6]"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Target Age Range
+                        </label>
+                        <input
+                          type="text"
+                          value={ageRange}
+                          onChange={(e) => setAgeRange(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Geographic Location
+                        </label>
+                        <input
+                          type="text"
+                          value={location}
+                          onChange={(e) => setLocation(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Audience Interest Chips
+                      </label>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {interestTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-blue-200 text-blue-900 text-[10px] font-semibold rounded-full shadow-sm"
+                          >
+                            {tag}
+                            <button
+                              type="button"
+                              onClick={() => setInterestTags(interestTags.filter((t) => t !== tag))}
+                              className="hover:text-red-600 text-gray-400 font-bold"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Add interest tag..."
+                          value={newTagInput}
+                          onChange={(e) => setNewTagInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addInterestTag())}
+                          className="flex-1 px-3 py-1 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6]"
+                        />
+                        <button
+                          type="button"
+                          onClick={addInterestTag}
+                          className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-semibold rounded-lg transition"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Preflight audit launcher */}
+                {!auditData && (
+                  <button
+                    type="button"
+                    onClick={handleRunAudit}
+                    disabled={isAuditing}
+                    className="w-full py-3 bg-[#1B4B91] hover:bg-[#14376c] text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition cursor-pointer"
+                  >
+                    <ShieldCheck className={`w-4 h-4 ${isAuditing ? 'animate-spin' : ''}`} />
+                    {isAuditing ? 'Running Healthcare & Insurance Compliance Audit...' : 'Run AI Pre-Flight Audit'}
+                  </button>
+                )}
+              </div>
+
+              {/* Audit results */}
+              {auditData && (
+                <div className="bg-white rounded-xl border border-[#c3c6d7] p-6 shadow-sm space-y-6 text-left">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                    <h3 className="text-sm font-bold text-[#1B4B91] flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-[#004ac6]" />
+                      AI Pre-Flight Compliance Audit Report
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-xl border border-gray-200 text-center">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+                        Compliance Score
+                      </span>
+                      <div className="relative w-20 h-20 flex items-center justify-center rounded-full border-4 border-[#004ac6] bg-white shadow-inner">
+                        <span className="text-2xl font-extrabold text-[#1B4B91]">{auditData.complianceScore}</span>
+                        <span className="text-[10px] text-gray-400 font-bold font-mono">/100</span>
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-2 space-y-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">
+                          CTR Prediction:
+                        </span>
+                        <span
+                          className={`px-3 py-1 rounded-full text-[10px] font-bold ${
+                            auditData.ctrPrediction === 'HIGH'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {auditData.ctrPrediction} CTR EXPECTED
+                        </span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wider block">
+                          Policy Compliance Status Checklist:
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {auditData.checklist.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs font-semibold text-gray-700 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                              {item.pass ? (
+                                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                              )}
+                              <span className="truncate">{item.rule}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`p-4 rounded-xl text-center font-extrabold text-sm flex items-center justify-center gap-3 ${
+                      auditData.auditResult === 'PASS'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-red-600 text-white'
+                    }`}
+                  >
+                    <span>PRE-FLIGHT AUDIT VERDICT: {auditData.auditResult}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions panel */}
+              <div className="bg-white rounded-xl border border-[#c3c6d7] p-4 flex items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => handleSaveCampaign('DRAFT')}
+                  className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-lg transition flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  Save Post as Draft
+                </button>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowScheduleModal(true)}
+                    className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-lg transition flex items-center gap-2"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    Schedule Post
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={publishMutation.isPending}
+                    onClick={() => handleSaveCampaign('PENDING')}
+                    className="px-6 py-2.5 bg-[#004ac6] hover:bg-[#003da3] text-white text-xs font-bold rounded-lg shadow-md disabled:opacity-40 transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <Send className="w-4 h-4" />
+                    {publishMutation.isPending ? 'Publishing...' : 'Publish Post Now'}
+                  </button>
+                </div>
               </div>
             </div>
-          )}
-
-          {/* Bottom Action Bar */}
-          <div className="bg-white rounded-xl border border-[#c3c6d7] p-4 flex items-center justify-between gap-4">
-            <button
-              type="button"
-              onClick={() => handleSaveCampaign('DRAFT')}
-              className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-lg transition flex items-center gap-2"
-            >
-              <Save className="w-4 h-4" />
-              Save as Draft
-            </button>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowScheduleModal(true)}
-                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-lg transition flex items-center gap-2"
-              >
-                <Calendar className="w-4 h-4" />
-                Schedule
-              </button>
-
-              <button
-                type="button"
-                disabled={publishMutation.isPending}
-                onClick={() => handleSaveCampaign('PENDING')}
-                className="px-6 py-2.5 bg-[#004ac6] hover:bg-[#003da3] text-white text-xs font-bold rounded-lg shadow-md disabled:opacity-40 transition flex items-center gap-2 cursor-pointer"
-              >
-                <Send className="w-4 h-4" />
-                {publishMutation.isPending ? 'Publishing...' : 'Publish Now'}
-              </button>
+          ) : (
+            <div className="space-y-4">
+              {renderCampaignsTable(
+                (historyData?.campaigns || []).filter(
+                  (c: any) => c.status === socialPostSubTab
+                )
+              )}
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* TAB 2: INTEGRATIONS TAB */}
+      {/* TAB 2: CALENDAR HUB */}
+      {activeTab === 'calendar' && (
+        <div className="space-y-6">
+          {renderCalendar()}
+        </div>
+      )}
+
+      {/* TAB 3: INTEGRATIONS HUB */}
       {activeTab === 'integrations' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border border-[#c3c6d7] p-6 shadow-sm">
             <h2 className="text-lg font-bold text-[#1B4B91] mb-2">Connected Marketing & Ad Platforms</h2>
             <p className="text-xs text-gray-600 mb-6">
-              Connect your official agency social media pages and ad accounts to enable automated publishing and lead tracking.
+              Connect official agency accounts to enable auto-posting campaigns and visual analytics aggregation.
             </p>
 
             {integrationsLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[1, 2, 3, 4, 5].map((i) => (
+                {[1, 2, 3].map((i) => (
                   <div key={i} className="h-32 bg-gray-100 animate-pulse rounded-xl" />
                 ))}
               </div>
@@ -829,197 +1275,10 @@ export default function DigitalMarketingSuitePage() {
         </div>
       )}
 
-      {/* TAB 3: HISTORY TAB */}
-      {activeTab === 'history' && (
+      {/* TAB 4: ANALYTICS & HISTORY HUB */}
+      {activeTab === 'analytics' && (
         <div className="space-y-6">
-          {/* History Filter Bar */}
-          <div className="bg-white rounded-xl border border-[#c3c6d7] p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <select
-                value={historyPlatformFilter}
-                onChange={(e) => setHistoryPlatformFilter(e.target.value)}
-                className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs font-semibold outline-none focus:border-[#004ac6]"
-              >
-                <option value="ALL">All Platforms</option>
-                <option value="facebook">Facebook</option>
-                <option value="instagram">Instagram</option>
-                <option value="linkedin">LinkedIn</option>
-                <option value="youtube">YouTube</option>
-              </select>
-
-              <select
-                value={historyStatusFilter}
-                onChange={(e) => setHistoryStatusFilter(e.target.value)}
-                className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs font-semibold outline-none focus:border-[#004ac6]"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="SUCCESS">Published (SUCCESS)</option>
-                <option value="PENDING">Pending</option>
-                <option value="PUBLISHING">Publishing</option>
-                <option value="FAILED">Failed</option>
-                <option value="DRAFT">Draft</option>
-              </select>
-            </div>
-
-            <span className="text-xs text-gray-500 font-medium">
-              Total Campaigns: {historyData?.campaigns?.length || 0}
-            </span>
-          </div>
-
-          {/* Published Posts Table */}
-          <div className="bg-white rounded-xl border border-[#c3c6d7] overflow-hidden shadow-sm">
-            {historyLoading ? (
-              <div className="p-8 text-center text-sm text-gray-500">Loading campaign history...</div>
-            ) : historyData?.campaigns?.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-500">No campaigns found. Compose one to get started!</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50 text-gray-600 border-b border-gray-200 font-semibold uppercase tracking-wider">
-                    <tr>
-                      <th className="p-4">Campaign Name</th>
-                      <th className="p-4">Platforms</th>
-                      <th className="p-4">Type</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4">Date</th>
-                      <th className="p-4">Est. Reach</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 font-medium">
-                    {historyData?.campaigns?.map((item: any) => {
-                      const isExpanded = expandedAbTestId === item.id;
-                      const hasAbVariants = item.abTestVariants && item.abTestVariants.length > 0;
-
-                      return (
-                        <React.Fragment key={item.id}>
-                          <tr className="hover:bg-gray-50/80 transition">
-                            <td className="p-4 font-bold text-gray-900">
-                              <div className="flex items-center gap-2">
-                                {hasAbVariants && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setExpandedAbTestId(isExpanded ? null : item.id)}
-                                    className="p-1 text-gray-500 hover:text-gray-900"
-                                  >
-                                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                  </button>
-                                )}
-                                <span>{item.name}</span>
-                              </div>
-                              <p className="text-[11px] text-gray-500 font-normal truncate max-w-md mt-0.5">
-                                {item.caption}
-                              </p>
-                            </td>
-
-                            <td className="p-4">
-                              <div className="flex items-center gap-1.5">
-                                {item.platforms?.map((p: string) => (
-                                  <span
-                                    key={p}
-                                    className="px-2 py-0.5 bg-blue-50 text-blue-800 rounded font-semibold text-[10px] uppercase"
-                                  >
-                                    {p}
-                                  </span>
-                                ))}
-                              </div>
-                            </td>
-
-                            <td className="p-4">
-                              <span
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                  item.type === 'PAID'
-                                    ? 'bg-purple-100 text-purple-800'
-                                    : 'bg-gray-100 text-gray-800'
-                                }`}
-                              >
-                                {item.type}
-                              </span>
-                            </td>
-
-                            <td className="p-4">
-                              <span
-                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                  item.status === 'SUCCESS'
-                                    ? 'bg-green-100 text-green-800'
-                                    : item.status === 'PUBLISHING'
-                                    ? 'bg-blue-100 text-blue-800 animate-pulse'
-                                    : item.status === 'FAILED'
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-gray-100 text-gray-700'
-                                }`}
-                              >
-                                {item.status === 'PUBLISHING' && <RotateCw className="w-3 h-3 animate-spin" />}
-                                {item.status}
-                              </span>
-                            </td>
-
-                            <td className="p-4 text-gray-600">
-                              {item.publishedAt
-                                ? new Date(item.publishedAt).toLocaleDateString()
-                                : item.createdAt
-                                ? new Date(item.createdAt).toLocaleDateString()
-                                : 'Draft'}
-                            </td>
-
-                            <td className="p-4 font-semibold text-gray-900">
-                              {item.reach ? item.reach.toLocaleString() : '0'}
-                            </td>
-
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                {item.status === 'FAILED' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => publishMutation.mutate({ campaignId: item.id, action: 'retry' })}
-                                    className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold transition flex items-center gap-1"
-                                  >
-                                    <RotateCw className="w-3 h-3" />
-                                    Retry
-                                  </button>
-                                )}
-                                <a
-                                  href={`/dashboard/marketing`}
-                                  className="p-1.5 text-gray-500 hover:text-[#004ac6] transition"
-                                  title="View Post Details"
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                </a>
-                              </div>
-                            </td>
-                          </tr>
-
-                          {/* A/B Test Variant Expandable Row */}
-                          {isExpanded && hasAbVariants && (
-                            <tr className="bg-blue-50/40">
-                              <td colSpan={7} className="p-4">
-                                <div className="p-4 bg-white rounded-lg border border-blue-200 space-y-3">
-                                  <h4 className="text-xs font-bold text-[#1B4B91] uppercase tracking-wider">
-                                    A/B Test Variant Performance Comparison
-                                  </h4>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {item.abTestVariants.map((varItem: any, idx: number) => (
-                                      <div key={varItem.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs">
-                                        <div className="flex justify-between font-bold text-gray-900 mb-1">
-                                          <span>Variant {String.fromCharCode(65 + idx)}</span>
-                                          <span className="text-[#004ac6]">Reach: {varItem.reach?.toLocaleString()}</span>
-                                        </div>
-                                        <p className="text-gray-600 line-clamp-2">{varItem.caption}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          {renderAnalytics()}
         </div>
       )}
 
@@ -1027,12 +1286,12 @@ export default function DigitalMarketingSuitePage() {
       {showScheduleModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl border border-[#c3c6d7] max-w-md w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-lg font-bold text-[#1B4B91] flex items-center gap-2">
+            <h3 className="text-sm font-bold text-[#1B4B91] flex items-center gap-2">
               <Calendar className="w-5 h-5 text-[#004ac6]" />
-              Schedule Campaign Release
+              Schedule Post Release
             </h3>
             <p className="text-xs text-gray-600">
-              Select the date and time when this pre-audited campaign should automatically publish.
+              Select the date and time when this pre-audited post should automatically publish.
             </p>
 
             <div>
@@ -1041,7 +1300,7 @@ export default function DigitalMarketingSuitePage() {
                 type="datetime-local"
                 value={scheduleDateTime}
                 onChange={(e) => setScheduleDateTime(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-[#004ac6]"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6]"
               />
             </div>
 
@@ -1066,5 +1325,13 @@ export default function DigitalMarketingSuitePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function DigitalMarketingSuitePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-gray-500">Loading Digital Marketing Suite...</div>}>
+      <DigitalMarketingSuitePageInner />
+    </Suspense>
   );
 }
