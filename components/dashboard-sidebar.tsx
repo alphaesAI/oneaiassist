@@ -86,12 +86,6 @@ export default function DashboardSidebar() {
           icon: 'smart_toy',
         },
         {
-          name: 'Knowledge Base',
-          href: '/dashboard/knowledge-base',
-          roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER', 'AGENT'],
-          icon: 'book',
-        },
-        {
           name: 'Templates',
           href: '/dashboard/templates',
           roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER', 'AGENT'],

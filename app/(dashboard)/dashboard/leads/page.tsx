@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 interface Lead {
   id: string;
@@ -352,7 +353,9 @@ export default function LeadsPage() {
                         </div>
 
                         <h4 className="text-xs font-bold text-[#1c1b1f] truncate group-hover:text-[#004ac6] transition-colors">
-                          {lead.customer.displayName}
+                          <Link href={`/dashboard/customers/${lead.customer.id}`} className="hover:underline">
+                            {lead.customer.displayName}
+                          </Link>
                         </h4>
 
                         <div className="flex items-center gap-1 text-[10px] text-[#737686] font-medium">
@@ -400,7 +403,11 @@ export default function LeadsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {leads?.map((lead) => (
                     <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-4 font-bold text-[#1c1b1f]">{lead.customer.displayName}</td>
+                      <td className="p-4 font-bold text-[#1c1b1f]">
+                        <Link href={`/dashboard/customers/${lead.customer.id}`} className="hover:underline hover:text-[#004ac6] transition-colors">
+                          {lead.customer.displayName}
+                        </Link>
+                      </td>
                       <td className="p-4 font-medium text-[#737686]">{lead.customer.phone}</td>
                       <td className="p-4">
                         <span className="px-2 py-0.5 bg-slate-100 text-[#1c1b1f] border border-[#c3c6d7]/50 rounded font-semibold text-[10px] capitalize">

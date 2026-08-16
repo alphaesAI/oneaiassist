@@ -13,7 +13,7 @@ async function run() {
   const tenant = await prisma.tenant.create({
     data: {
       name: 'AI Agent Test Agency',
-      slug: 'ai-agent-test',
+      slug: 'ai-agent-test-' + Date.now().toString().slice(-6),
       subscriptionPlan: 'FREE',
       subscriptionStatus: 'ACTIVE',
     },
@@ -44,7 +44,7 @@ async function run() {
     console.log('\n[2/4] Initializing Policy Catalog products...');
     
     // Plan A: Budget overlap ($100 to $200), State TX, Active
-    const policyA = await db.policyCatalog.create({
+    const policyA = await db.policyCatalogItem.create({
       data: {
         tenantId,
         policyId: 'bronze-tx-01',
@@ -61,7 +61,7 @@ async function run() {
     });
 
     // Plan B: No Budget overlap ($300 to $400), State TX, Active
-    await db.policyCatalog.create({
+    await db.policyCatalogItem.create({
       data: {
         tenantId,
         policyId: 'gold-tx-02',
@@ -78,7 +78,7 @@ async function run() {
     });
 
     // Setup Contact and Conversation
-    const contact = await db.contact.create({
+    const contact = await db.customer.create({
       data: {
         tenantId,
         displayName: 'John Test Lead',
@@ -91,7 +91,7 @@ async function run() {
     const conversation = await db.conversation.create({
       data: {
         tenantId,
-        contactId: contact.id,
+        customerId: contact.id,
         channel: 'WHATSAPP',
         status: 'OPEN',
       },
@@ -116,7 +116,7 @@ async function run() {
         tenantId,
         conversationId: conversation.id,
         direction: 'INBOUND',
-        senderType: 'CONTACT',
+        senderType: 'CUSTOMER',
         content: 'Hi, my age is 35, I live in TX, no health conditions, my budget is $100 to $200 and family size is 1.',
         channel: 'WHATSAPP',
       },
@@ -127,7 +127,7 @@ async function run() {
 
     // Verify database updates on Lead record
     const lead = await db.lead.findFirst({
-      where: { contactId: contact.id },
+      where: { customerId: contact.id },
     });
 
     console.log(`- Lead status: ${lead?.status}`);
@@ -205,8 +205,8 @@ async function run() {
     await db.lead.deleteMany();
     await db.message.deleteMany();
     await db.conversation.deleteMany();
-    await db.contact.deleteMany();
-    await db.policyCatalog.deleteMany();
+    await db.customer.deleteMany();
+    await db.policyCatalogItem.deleteMany();
     await prisma.tenant.delete({
       where: { id: tenantId },
     });

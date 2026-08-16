@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
 import { io } from 'socket.io-client';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 interface Conversation {
   id: string;
@@ -705,13 +706,13 @@ export default function InboxPage() {
 
           {/* Full Profile Link Footer */}
           <div className="p-4 border-t border-[#c3c6d7]/60">
-            <a
-              href="/dashboard/leads"
+            <Link
+              href={`/dashboard/customers/${selectedConv.customer.id}`}
               className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-[#004ac6] hover:brightness-105 text-white font-bold rounded-xl text-[10px] transition-colors"
             >
               View Full Profile
               <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-            </a>
+            </Link>
           </div>
         </section>
       )}

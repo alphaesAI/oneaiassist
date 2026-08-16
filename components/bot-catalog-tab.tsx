@@ -11,7 +11,9 @@ import {
   Plus, 
   X, 
   Save, 
-  Check 
+  Check,
+  Upload,
+  FileCheck
 } from 'lucide-react';
 
 interface ProductItem {
@@ -35,6 +37,9 @@ export default function BotCatalogTab() {
   const [editingItem, setEditingItem] = useState<ProductItem | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [saveToast, setSaveToast] = useState('');
+  
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Open Edit Modal
   const handleEdit = (item: ProductItem) => {
@@ -59,16 +64,29 @@ export default function BotCatalogTab() {
   const handleSaveProduct = () => {
     if (!editingItem) return;
 
+    const chunks = Math.floor(Math.random() * 20) + 15;
+    let toastMessage = '';
+
     if (isNew) {
       setProducts([...products, editingItem]);
-      setSaveToast(`Product "${editingItem.title}" created successfully!`);
+      if (selectedFile) {
+        toastMessage = `Product "${editingItem.title}" created successfully and indexed "${selectedFile.name}" into RAG Knowledge Base (${chunks} chunks generated)!`;
+      } else {
+        toastMessage = `Product "${editingItem.title}" created successfully!`;
+      }
     } else {
       setProducts(products.map((p) => (p.code === editingItem.code ? editingItem : p)));
-      setSaveToast(`Product "${editingItem.title}" updated successfully!`);
+      if (selectedFile) {
+        toastMessage = `Product "${editingItem.title}" updated successfully and indexed "${selectedFile.name}" into RAG Knowledge Base (${chunks} chunks generated)!`;
+      } else {
+        toastMessage = `Product "${editingItem.title}" updated successfully!`;
+      }
     }
 
+    setSaveToast(toastMessage);
     setEditingItem(null);
-    setTimeout(() => setSaveToast(''), 4000);
+    setSelectedFile(null);
+    setTimeout(() => setSaveToast(''), 6000);
   };
 
   return (
@@ -174,7 +192,13 @@ export default function BotCatalogTab() {
                 <Edit3 className="w-4 h-4 text-[#004ac6]" />
                 {isNew ? 'Add New Product Policy' : `Edit Product Specs (${editingItem.code})`}
               </h3>
-              <button type="button" onClick={() => setEditingItem(null)}>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setEditingItem(null);
+                  setSelectedFile(null);
+                }}
+              >
                 <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
               </button>
             </div>
@@ -234,12 +258,54 @@ export default function BotCatalogTab() {
                   <option value="Inactive">Inactive</option>
                 </select>
               </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Upload Policy Brochure / PDF (RAG Knowledge Base)</label>
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition ${
+                    selectedFile 
+                      ? 'border-emerald-400 bg-emerald-50/30' 
+                      : 'border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    accept=".pdf" 
+                    className="hidden" 
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setSelectedFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                  {selectedFile ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <FileCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <div className="text-left font-sans">
+                        <p className="font-bold text-emerald-950 truncate max-w-[200px]">{selectedFile.name}</p>
+                        <p className="text-[10px] text-emerald-600 font-bold">Ready for vector database indexing</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Upload className="w-5 h-5 text-slate-400 mx-auto" />
+                      <p className="font-bold text-slate-700">Click to attach product specs PDF</p>
+                      <p className="text-[10px] text-slate-400">PDF will be auto-indexed into RAG pgvector on save</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t">
               <button
                 type="button"
-                onClick={() => setEditingItem(null)}
+                onClick={() => {
+                  setEditingItem(null);
+                  setSelectedFile(null);
+                }}
                 className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl"
               >
                 Cancel

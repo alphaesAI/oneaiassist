@@ -58,6 +58,7 @@ export default function AiBotPage() {
         [
           'identity',
           'intake',
+          'knowledge',
           'escalation',
           'guardrails',
           'catalog',
@@ -143,6 +144,7 @@ export default function AiBotPage() {
   const navTabs = [
     { id: 'identity' as const, label: 'Identity & Model Tuning', icon: Bot },
     { id: 'intake' as const, label: 'Intake Flow Builder', icon: Workflow },
+    { id: 'knowledge' as const, label: 'RAG Knowledge Base', icon: BookOpen },
     { id: 'escalation' as const, label: 'Human Handoff Rules', icon: Headphones },
     { id: 'guardrails' as const, label: 'Safety & Compliance', icon: ShieldCheck },
     { id: 'catalog' as const, label: 'Product Catalog', icon: Package },
@@ -202,6 +204,7 @@ export default function AiBotPage() {
 
       {/* Tab Contents */}
       {activeTab === 'identity' && <BotIdentityTab />}
+      {activeTab === 'knowledge' && <BotKnowledgeRagTab />}
       {activeTab === 'escalation' && <BotEscalationTab />}
       {activeTab === 'guardrails' && <BotGuardrailsTab />}
       {activeTab === 'catalog' && <BotCatalogTab />}
