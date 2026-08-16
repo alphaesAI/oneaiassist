@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Package, 
   Shield, 
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 
 interface ProductItem {
+  id?: string;
   code: string;
   title: string;
   premium: string;
@@ -26,17 +28,43 @@ interface ProductItem {
 }
 
 export default function BotCatalogTab() {
-  const [products, setProducts] = useState<ProductItem[]>([
+  const queryClient = useQueryClient();
+
+  const { data: dbProducts, isLoading } = useQuery<any[]>({
+    queryKey: ['policy-catalog'],
+    queryFn: async () => {
+      const res = await fetch('/api/policy-catalog');
+      if (!res.ok) throw new Error('Failed to load catalog');
+      return res.json();
+    }
+  });
+
+  const mapDbToProduct = (dbItem: any): ProductItem => ({
+    id: dbItem.id,
+    code: dbItem.policyId,
+    title: dbItem.name,
+    premium: `$${dbItem.premiumMin / 100} - $${dbItem.premiumMax / 100} / mo`,
+    maxInsured: dbItem.sumInsured >= 100000000 ? 'Unlimited' : `$${(dbItem.sumInsured / 100).toLocaleString()}`,
+    states: dbItem.states.join(', '),
+    status: dbItem.active ? 'Active' : 'Inactive',
+  });
+
+  const fallbackProducts: ProductItem[] = [
     { code: 'POL-HEALTH-001', title: 'Apex Care Basic Individual Health Plan', premium: '$50 - $150 / mo', maxInsured: '$250,000', states: 'NY, CA, TX, FL', status: 'Active' },
     { code: 'POL-HEALTH-002', title: 'Apex Family Gold Comprehensive Plan', premium: '$180 - $450 / mo', maxInsured: '$1,000,000', states: 'NY, CA, TX, IL, FL', status: 'Active' },
     { code: 'POL-HEALTH-003', title: 'Apex Senior Medicare Advantage Supplement', premium: '$0 - $85 / mo', maxInsured: 'Unlimited (Medicare Part C)', states: 'All 50 US States', status: 'Active' },
     { code: 'POL-HEALTH-004', title: 'Apex Small Business Group Healthcare', premium: '$120 - $320 / emp/mo', maxInsured: '$500,000', states: 'NY, CA, TX, PA, OH', status: 'Active' },
     { code: 'POL-HEALTH-005', title: 'Apex Dental & Vision Shield Rider', premium: '$15 - $45 / mo', maxInsured: '$5,000 annual', states: 'All 50 US States', status: 'Active' },
-  ]);
+  ];
+
+  const products = dbProducts && dbProducts.length > 0
+    ? dbProducts.map(mapDbToProduct)
+    : fallbackProducts;
 
   const [editingItem, setEditingItem] = useState<ProductItem | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [saveToast, setSaveToast] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -60,33 +88,100 @@ export default function BotCatalogTab() {
     setIsNew(true);
   };
 
+  const parseCents = (str: string, defaultValue: number): number => {
+    const matches = str.match(/\d[\d,.]*/g);
+    if (!matches || matches.length === 0) return defaultValue;
+    const clean = matches[0].replace(/,/g, '');
+    return Math.floor(Number(clean) * 100);
+  };
+
   // Save Modal Changes
-  const handleSaveProduct = () => {
+  const handleSaveProduct = async () => {
     if (!editingItem) return;
+    setIsSaving(true);
 
-    const chunks = Math.floor(Math.random() * 20) + 15;
-    let toastMessage = '';
+    try {
+      const premiumParts = editingItem.premium.split('-');
+      const premiumMin = parseCents(premiumParts[0] || '50', 5000);
+      const premiumMax = parseCents(premiumParts[1] || premiumParts[0] || '150', 15000);
+      const sumInsured = editingItem.maxInsured.toLowerCase().includes('unlimited')
+        ? 100000000
+        : parseCents(editingItem.maxInsured, 25000000);
+      const statesArray = editingItem.states.split(',').map((s) => s.trim()).filter(Boolean);
+      const insurerName = editingItem.title.split(' ')[0] || 'Apex';
 
-    if (isNew) {
-      setProducts([...products, editingItem]);
-      if (selectedFile) {
-        toastMessage = `Product "${editingItem.title}" created successfully and indexed "${selectedFile.name}" into RAG Knowledge Base (${chunks} chunks generated)!`;
+      const payload = {
+        id: editingItem.id,
+        policyId: editingItem.code,
+        name: editingItem.title,
+        insurerName,
+        states: statesArray,
+        premiumMin,
+        premiumMax,
+        sumInsured,
+        active: editingItem.status === 'Active',
+      };
+
+      let savedPolicyId = editingItem.id;
+      let res;
+
+      if (isNew) {
+        res = await fetch('/api/policy-catalog', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
       } else {
-        toastMessage = `Product "${editingItem.title}" created successfully!`;
+        res = await fetch('/api/policy-catalog', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
       }
-    } else {
-      setProducts(products.map((p) => (p.code === editingItem.code ? editingItem : p)));
-      if (selectedFile) {
-        toastMessage = `Product "${editingItem.title}" updated successfully and indexed "${selectedFile.name}" into RAG Knowledge Base (${chunks} chunks generated)!`;
-      } else {
-        toastMessage = `Product "${editingItem.title}" updated successfully!`;
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save policy specs to database');
       }
+
+      const dbSavedItem = await res.json();
+      savedPolicyId = dbSavedItem.id;
+
+      // Handle PDF Upload if file was attached
+      let chunksInfo = '';
+      if (selectedFile && savedPolicyId) {
+        const uploadForm = new FormData();
+        uploadForm.append('id', savedPolicyId);
+        uploadForm.append('file', selectedFile);
+
+        const uploadRes = await fetch('/api/policy-catalog/upload', {
+          method: 'POST',
+          body: uploadForm,
+        });
+
+        if (!uploadRes.ok) {
+          const uploadErr = await uploadRes.json().catch(() => ({}));
+          throw new Error(uploadErr.error || 'Failed to upload and index policy brochure PDF');
+        }
+
+        const uploadData = await uploadRes.json();
+        chunksInfo = ` and successfully indexed "${selectedFile.name}" into RAG Knowledge Base (${uploadData.chunkCount} chunks generated)`;
+      }
+
+      setSaveToast(`Product "${editingItem.title}" saved successfully${chunksInfo}!`);
+      
+      // Invalidate queries to reload all views in dashboard
+      queryClient.invalidateQueries({ queryKey: ['policy-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['policy-catalog-rag'] });
+
+      setEditingItem(null);
+      setSelectedFile(null);
+      setTimeout(() => setSaveToast(''), 6000);
+    } catch (err: any) {
+      alert(err.message || 'Error occurred during save operations');
+    } finally {
+      setIsSaving(false);
     }
-
-    setSaveToast(toastMessage);
-    setEditingItem(null);
-    setSelectedFile(null);
-    setTimeout(() => setSaveToast(''), 6000);
   };
 
   return (
@@ -313,10 +408,11 @@ export default function BotCatalogTab() {
               <button
                 type="button"
                 onClick={handleSaveProduct}
-                className="px-5 py-2 bg-[#004ac6] hover:bg-[#003da3] text-white font-bold rounded-xl shadow-md flex items-center gap-1.5"
+                disabled={isSaving}
+                className="px-5 py-2 bg-[#004ac6] hover:bg-[#003da3] text-white font-bold rounded-xl shadow-md flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                Save Policy Specs
+                {isSaving ? 'Saving Specs...' : 'Save Policy Specs'}
               </button>
             </div>
           </div>

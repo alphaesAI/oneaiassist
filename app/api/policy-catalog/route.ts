@@ -8,6 +8,11 @@ export async function GET() {
     const db = getTenantPrisma(tenantId, role || 'ADMIN');
 
     const policies = await db.policyCatalogItem.findMany({
+      include: {
+        _count: {
+          select: { documentChunks: true }
+        }
+      },
       orderBy: { createdAt: 'desc' },
     });
 

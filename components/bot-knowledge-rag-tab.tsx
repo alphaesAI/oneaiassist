@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { 
   BookOpen, 
   FileText, 
@@ -40,14 +41,36 @@ export default function BotKnowledgeRagTab() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccessMsg, setUploadSuccessMsg] = useState('');
+  const [localPolicies, setLocalPolicies] = useState<PolicyDoc[]>([]);
 
-  const [policies, setPolicies] = useState<PolicyDoc[]>([
+  const { data: dbPolicies } = useQuery<any[]>({
+    queryKey: ['policy-catalog-rag'],
+    queryFn: async () => {
+      const res = await fetch('/api/policy-catalog');
+      if (!res.ok) throw new Error('Failed to load RAG policies');
+      return res.json();
+    }
+  });
+
+  const fallbackPolicies: PolicyDoc[] = [
     { id: 'POL-HEALTH-001', name: 'Apex Care Basic Individual Health Plan', chunks: 22, status: 'Indexed', date: '2026-08-01' },
     { id: 'POL-HEALTH-002', name: 'Apex Family Gold Comprehensive Plan', chunks: 34, status: 'Indexed', date: '2026-08-02' },
     { id: 'POL-HEALTH-003', name: 'Apex Senior Medicare Advantage Supplement', chunks: 18, status: 'Indexed', date: '2026-08-02' },
     { id: 'POL-HEALTH-004', name: 'Apex Small Business Group Healthcare', chunks: 29, status: 'Indexed', date: '2026-08-03' },
     { id: 'POL-HEALTH-005', name: 'Apex Dental & Vision Shield Rider', chunks: 15, status: 'Indexed', date: '2026-08-04' },
-  ]);
+  ];
+
+  const dbMappedPolicies: PolicyDoc[] = dbPolicies && dbPolicies.length > 0
+    ? dbPolicies.map((p) => ({
+        id: p.id, // Database cuid ID
+        name: p.name,
+        chunks: p._count?.documentChunks || 0,
+        status: p.pdfUrl ? 'Indexed' : 'Not Indexed',
+        date: new Date(p.createdAt).toISOString().split('T')[0],
+      }))
+    : fallbackPolicies;
+
+  const policies = [...localPolicies, ...dbMappedPolicies];
 
   const [selectedPolicyChunks, setSelectedPolicyChunks] = useState<{
     policyId: string;
@@ -77,7 +100,7 @@ export default function BotKnowledgeRagTab() {
         date: new Date().toISOString().split('T')[0],
       };
 
-      setPolicies([newDoc, ...policies]);
+      setLocalPolicies([newDoc, ...localPolicies]);
       setIsUploading(false);
       setSelectedFile(null);
       setShowUploadModal(false);
