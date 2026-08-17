@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, getTenantPrisma } from '@/lib/db';
 
 export async function GET(request: Request, { params }: { params: { 'tenant-slug': string } }) {
   try {
@@ -23,7 +23,8 @@ export async function GET(request: Request, { params }: { params: { 'tenant-slug
     if (maxPrice) where.premiumMax = { lte: Number(maxPrice) };
     if (coverage) where.coverageType = coverage; // assumes field exists
 
-    const items = await prisma.policyCatalogItem.findMany({ where });
+    const db = getTenantPrisma(tenant.id, 'CUSTOMER');
+    const items = await db.policyCatalogItem.findMany({ where });
     return NextResponse.json({ items });
   } catch (err: any) {
     console.error('[Products API Error]:', err);

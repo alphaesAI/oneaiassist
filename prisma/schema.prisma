@@ -168,6 +168,8 @@ model Tenant {
   escalationLogs       EscalationLog[]
   marketingCampaigns   MarketingCampaign[]
   platformConnections  PlatformConnection[]
+  intakeSessions       IntakeSession[]
+  inboundMessageJobs   InboundMessageJob[]
 }
 
 model BotConfig {
@@ -250,6 +252,7 @@ model Customer {
   policies         Policy[]
   broadcastJobs    BroadcastJob[]
   notes            CustomerNote[]
+  intakeSessions   IntakeSession[]
 
   @@index([tenantId])
   @@index([primaryPhone])
@@ -350,6 +353,7 @@ model Lead {
   customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
   assignedAgent User?         @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
   applications  Application[]
+  intakeSession IntakeSession?
 
   @@index([tenantId])
   @@index([customerId])
@@ -761,5 +765,57 @@ model PlatformConnection {
 
   @@index([tenantId])
   @@unique([tenantId, platform])
+}
+
+enum IntakeSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+model IntakeSession {
+  id              String              @id @default(cuid())
+  tenantId        String
+  leadId          String              @unique
+  customerId      String
+  flowId          String
+  flowVersion     String
+  status          IntakeSessionStatus @default(IN_PROGRESS)
+  collectedFields Json
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  completedAt     DateTime?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([leadId])
+  @@index([customerId])
+}
+
+enum InboundJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model InboundMessageJob {
+  id             String           @id @default(cuid())
+  tenantId       String
+  conversationId String
+  messageId      String           @unique
+  status         InboundJobStatus @default(PENDING)
+  attempts       Int              @default(0)
+  lastError      String?
+  createdAt      DateTime         @default(now())
+  processedAt    DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status, createdAt])
 }
 

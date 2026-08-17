@@ -6,7 +6,7 @@ import cors from 'cors';
 import qrcode from 'qrcode';
 import { getTenantPrisma } from '../lib/db/index';
 import { decrypt } from '../lib/encryption';
-import { connectTenant, sessions, qrCodes, pairingCodes } from './engine-logic';
+import { connectTenant, sessions, qrCodes, pairingCodes, startInboundJobWorker } from './engine-logic';
 import { connectTenantOpenWA, openwaSessions, openwaQrCodes } from './openwa-logic';
 import { MessageService } from './MessageService';
 import { TransportManager } from './transport/TransportManager';
@@ -250,16 +250,35 @@ app.post('/api/whatsapp/webchat/inbound', async (req, res) => {
     });
 
     if (config?.isActive) {
-      // Trigger AI Agent auto-response loop asynchronously
-      const { runAIAgentAutoResponse } = require('./engine-logic');
-      runAIAgentAutoResponse(tenantId, conversationId, io).catch((err: any) => {
-        console.error(`[AI Agent] Auto-reply error on webchat for tenant ${tenantId}:`, err);
+      await db.inboundMessageJob.create({
+        data: {
+          tenantId,
+          conversationId,
+          messageId,
+          status: 'PENDING',
+        },
       });
+      console.log(`[Webchat] Enqueued inbound message job for conversation ${conversationId}`);
     }
 
     return res.json({ success: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown inbound webchat handler error';
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// REST API: Generic Socket.io Emit Gateway (Allows Next.js APIs to trigger dashboard events)
+app.post('/api/whatsapp/emit', async (req, res) => {
+  try {
+    const { tenantId, event, data } = req.body;
+    if (!tenantId || !event) {
+      return res.status(400).json({ error: 'tenantId and event are required' });
+    }
+    io.to(`tenant_${tenantId}`).emit(event, data);
+    return res.json({ success: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Emit error';
     return res.status(500).json({ error: msg });
   }
 });
@@ -270,4 +289,5 @@ server.listen(PORT, () => {
   console.log(`=========================================`);
   console.log(`WhatsApp Engine running on port ${PORT}`);
   console.log(`=========================================`);
+  startInboundJobWorker(io);
 });

@@ -1,12 +1,13 @@
 import makeWASocket, { DisconnectReason, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode';
-import { getTenantPrisma } from '../lib/db/index';
+import { getTenantPrisma, prisma } from '../lib/db/index';
 import { decrypt, encrypt } from '../lib/encryption';
 import { getDatabaseAuthState, clearDatabaseAuthState } from './auth-state';
 import { getTenantAIClient } from '../lib/ai/client';
 import pino from 'pino';
 import { Boom } from '@hapi/boom';
 import { WhatsAppNormalizer } from './WhatsAppNormalizer';
+import { IntakeQualificationSkill } from '../lib/claw/IntakeQualificationSkill';
 
 export const sessions = new Map<string, any>();
 export const qrCodes = new Map<string, string>();
@@ -226,108 +227,36 @@ export async function runAIAgentAutoResponse(tenantId: string, conversationId: s
     }
     throw err;
   }
+  // 4. Gating and OpenClaw Turn Execution
+  const isIntakeFlow = lead && (lead.status === 'NEW' || lead.status === 'APPLICATION_CAPTURED');
+  let botReplyText = '';
 
-  // 4. Construct Chat Message Logs
-  const systemPrompt = `You are a professional insurance sales agent assisting a lead over WhatsApp.
-Your goal is to politely guide the conversation to collect the following 5 qualification details for health/life coverage:
-1. Age (must be a number)
-2. US State of residence (2-letter abbreviation)
-3. Pre-existing health conditions (if none, write None)
-4. Monthly premium budget (min and max monthly amount in dollars, e.g. $100 to $250)
-5. Family size (number of family members to be covered, including themselves)
-
-Be warm, conversational, and direct. Ask for these inputs one by one or naturally.
-If you have collected all 5 fields, or the user has provided them, you must append this special JSON block at the very end of your response:
-[[INTAKE_DATA:{"age":35,"state":"TX","healthConditions":"None","budgetMin":100,"budgetMax":250,"familySize":1}]]
-
-Do not invent pre-populated values unless the user specified them. Keep asking questions until you have all 5 values.`;
-
-  const formattedMessages: any[] = [
-    { role: 'system', content: systemPrompt },
-    ...history.map((m) => ({
-      role: m.senderType === 'CUSTOMER' ? 'user' : 'assistant',
+  if (isIntakeFlow) {
+    console.log(`[AI Agent] Executing OpenClaw IntakeQualificationSkill for lead ${lead.id}...`);
+    const mappedHistory = history.map((m) => ({
+      role: m.senderType === 'CUSTOMER' ? 'user' : 'assistant' as const,
       content: m.content,
-    })),
-  ];
-
-  // 5. Generate AI Response
-  console.log(`[AI Agent] Generating response for conversation ${conversationId}...`);
-  let botReplyText = await aiClient.generateChat(formattedMessages);
-
-  // 6. Check for Intake Completion JSON Tag
-  if (botReplyText.includes('[[INTAKE_DATA:')) {
-    try {
-      const parts = botReplyText.split('[[INTAKE_DATA:');
-      const textReply = parts[0].trim();
-      const rawJson = parts[1].split(']]')[0].trim();
-      const intakeData = JSON.parse(rawJson);
-
-      console.log(`[AI Agent] Intake complete for lead ${lead.id}:`, intakeData);
-
-      // Save intake fields and transition Lead status to QUALIFIED
-      await db.lead.update({
-        where: { id: lead.id },
-        data: {
-          intakeAge: intakeData.age,
-          intakeState: intakeData.state.toUpperCase(),
-          intakeHealthConditions: intakeData.healthConditions,
-          intakeBudgetMin: intakeData.budgetMin * 100, // stored in cents
-          intakeBudgetMax: intakeData.budgetMax * 100, // stored in cents
-          intakeFamilySize: intakeData.familySize,
-          status: 'QUALIFIED',
-        },
-      });
-
-      // Search matching policies in PolicyCatalog
-      const parsedState = intakeData.state.toUpperCase();
-      const budgetMinCents = intakeData.budgetMin * 100;
-      const budgetMaxCents = intakeData.budgetMax * 100;
-
-      const matchingPolicies = await db.policyCatalogItem.findMany({
-        where: {
-          active: true,
-          states: {
-            has: parsedState,
-          },
-          premiumMin: {
-            lte: budgetMaxCents,
-          },
-          premiumMax: {
-            gte: budgetMinCents,
-          },
-        },
-        take: 4,
-      });
-
-      // Save recommended plan IDs
-      const recIds = matchingPolicies.map((p) => p.id);
-      await db.lead.update({
-        where: { id: lead.id },
-        data: { recommendedPolicyIds: recIds },
-      });
-
-      // Format recommendation payload for final plain language explanation
-      let policiesPrompt = `I have qualified the lead and matched the following matching policies in the catalog:\n`;
-      if (matchingPolicies.length === 0) {
-        policiesPrompt += `No matching policies found for state ${parsedState} and budget $${intakeData.budgetMin}-$${intakeData.budgetMax}.\n`;
-      } else {
-        for (const p of matchingPolicies) {
-          policiesPrompt += `- Plan: ${p.name}, Insurer: ${p.insurerName}, Monthly Premium: $${(p.premiumMin / 100).toFixed(2)}-$${(p.premiumMax / 100).toFixed(2)}, Sum Insured: $${(p.sumInsured / 100).toLocaleString()}, Summary: ${p.extractedSummary}\n`;
-        }
-      }
-      policiesPrompt += `\nPlease explain these options to the user in a very warm, plain language summary (premiums, sum insured, exclusions, waiting periods). Make sure to ask which plan they want to select.`;
-
-      // Call AI client for the final recommendation explanation
-      console.log(`[AI Agent] Explaining matched policies to lead...`);
-      botReplyText = await aiClient.generateChat([
-        ...formattedMessages,
-        { role: 'assistant', content: textReply },
-        { role: 'user', content: policiesPrompt },
-      ]);
-
-    } catch (e) {
-      console.error('[AI Agent] Failed to parse intake data or match policies:', e);
-    }
+    }));
+    botReplyText = await IntakeQualificationSkill.runTurn({
+      tenantId,
+      lead,
+      conversation,
+      history: mappedHistory,
+      aiClient,
+      db,
+      io,
+    });
+  } else {
+    // Non-intake fallback: general warmth agent (RAG or basic response)
+    const systemPrompt = `You are a professional insurance sales agent assisting a customer. Answer their questions warmly.`;
+    const formattedMessages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
+      { role: 'system', content: systemPrompt },
+      ...history.map((m) => ({
+        role: (m.senderType === 'CUSTOMER' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: m.content,
+      })),
+    ];
+    botReplyText = await aiClient.generateChat(formattedMessages);
   }
 
   // 7. Dispatch Response based on Channel
@@ -630,6 +559,7 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
       try {
         let conversationId = '';
         let triggerAI = false;
+        let createdMessage: any = null;
 
         await db.$transaction(async (tx) => {
           // 1. Identity Unification Check
@@ -733,6 +663,7 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
               status: messageStatus,
             },
           });
+          createdMessage = message;
 
           // 5. Emit new_message event via Socket.io
           io.to(`tenant_${tenantId}`).emit('new_message', {
@@ -797,17 +728,22 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
         }, { timeout: 20000 });
 
         if (triggerAI) {
-          // Trigger AI auto-response if configured and active
           const config = await db.tenantAIConfig.findUnique({
             where: { tenantId },
           });
 
           if (config?.isActive && conversationId) {
-            try {
-              await sock.sendPresenceUpdate('composing', fromJid);
-              await runAIAgentAutoResponse(tenantId, conversationId, io);
-            } finally {
-              await sock.sendPresenceUpdate('paused', fromJid).catch(() => {});
+            const msgId = createdMessage?.id || '';
+            const job = await db.inboundMessageJob.upsert({
+              where: { messageId: msgId },
+              create: { tenantId, conversationId, messageId: msgId, status: 'PENDING' },
+              update: {}, // noop — duplicate webhook delivery, original job retained
+            });
+            const isNew = job.createdAt >= new Date(Date.now() - 2000);
+            if (isNew) {
+              console.log(`[Engine] Enqueued inbound message job ${job.id} for conversation ${conversationId}`);
+            } else {
+              console.log(`[Engine] Duplicate messageId ${msgId} received — skipped re-enqueue`);
             }
           }
         }
@@ -855,3 +791,52 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
     connectingTenants.delete(tenantId);
   }
 }
+
+let workerActive = false;
+
+export function startInboundJobWorker(io: any) {
+  if (workerActive) return;
+  workerActive = true;
+  console.log('[Inbound Worker] Starting database-backed queue poll loop...');
+
+  setInterval(async () => {
+    try {
+      const job = await prisma.inboundMessageJob.findFirst({
+        where: { status: 'PENDING' },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (!job) return;
+
+      await prisma.inboundMessageJob.update({
+        where: { id: job.id },
+        data: { status: 'PROCESSING' },
+      });
+
+      console.log(`[Inbound Worker] Processing job ${job.id} for conversation ${job.conversationId}...`);
+      
+      try {
+        await runAIAgentAutoResponse(job.tenantId, job.conversationId, io);
+        
+        await prisma.inboundMessageJob.update({
+          where: { id: job.id },
+          data: { status: 'COMPLETED', processedAt: new Date() },
+        });
+      } catch (err: any) {
+        console.error(`[Inbound Worker] Job ${job.id} failed:`, err);
+        const attempts = job.attempts + 1;
+        await prisma.inboundMessageJob.update({
+          where: { id: job.id },
+          data: {
+            status: attempts >= 3 ? 'FAILED' : 'PENDING',
+            attempts,
+            lastError: err?.message || String(err),
+          },
+        });
+      }
+    } catch (err) {
+      console.error('[Inbound Worker] Poller encountered error:', err);
+    }
+  }, 2000);
+}
+

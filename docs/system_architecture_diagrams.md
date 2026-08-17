@@ -225,3 +225,48 @@ sequenceDiagram
     RAG->>Engine: Send Formatted Message
     Engine-->>User: Deliver Answer to Customer on WhatsApp
 ```
+
+---
+
+## 6. OpenClaw Inbound Queueing & AI Intake Flow Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer
+    participant Listeners as Channel Message Listeners<br/>(Baileys/OpenWA/Webchat)
+    participant DB as Neon PostgreSQL (Neon RLS)
+    participant Worker as Inbound Queue Worker Loop
+    participant Skill as IntakeQualificationSkill
+    participant CompleteAPI as Handoff Complete API
+    participant Socket as Socket.io Server (Port 3001)
+    participant Dashboard as Leads Dashboard UI
+
+    Customer->>Listeners: Sends WhatsApp message ("I am 35 years old")
+    Listeners->>DB: Save message & insert InboundMessageJob (status='PENDING')
+    Listeners-->>Customer: Acknowledge message receipt (instant ack)
+    
+    Note over Worker: Polls DB for PENDING jobs every 2 seconds
+    Worker->>DB: Update InboundMessageJob status to 'PROCESSING'
+    Worker->>Skill: Invoke runTurn(collectedFields, messageText)
+    Skill->>DB: Lookup/Create IntakeSession
+    Skill->>Skill: Extract parameters ("age: 35")
+    Skill->>DB: Update IntakeSession collectedFields
+    Skill->>Socket: Emit 'intake_progress_updated' (e.g. "1 of 6 fields collected")
+    Socket-->>Dashboard: Live update Kanban card checklist (React Query invalidation)
+
+    alt All fields gathered
+        Skill->>CompleteAPI: POST /api/bot/intake/complete (sessionId, leadId, intake)
+        CompleteAPI->>DB: Transaction: Update Lead.status to 'QUALIFIED'
+        CompleteAPI->>DB: Query PolicyCatalogItem matching state & budget limits
+        CompleteAPI->>DB: Save matching recommendedPolicyIds to Lead
+        CompleteAPI->>DB: Log AuditLog entry
+        CompleteAPI->>Socket: Emit 'lead_status_updated' (status='QUALIFIED')
+        Socket-->>Dashboard: Move card to Qualified Column & refresh recommended list
+    else More fields required
+        Skill->>Skill: Ask for next parameter (e.g. "Which state do you live in?")
+        Skill-->>Customer: Deliver conversational request
+    end
+    Worker->>DB: Update InboundMessageJob status to 'COMPLETED'
+```
+

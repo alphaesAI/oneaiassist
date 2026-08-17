@@ -55,6 +55,7 @@ export async function GET(req: Request) {
             role: true,
           },
         },
+        intakeSession: true,
       },
       orderBy: {
         updatedAt: 'desc',
@@ -104,6 +105,7 @@ export async function GET(req: Request) {
                 email: lead.assignedAgent.email,
               }
             : null,
+          intakeSession: lead.intakeSession,
         };
       })
       .filter((lead) => {

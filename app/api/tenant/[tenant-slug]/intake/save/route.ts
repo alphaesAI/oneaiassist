@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, getTenantPrisma } from '@/lib/db';
 
 export async function POST(
   req: NextRequest,
@@ -25,13 +25,9 @@ export async function POST(
     const xForwardedFor = req.headers.get('x-forwarded-for');
     const ip = xForwardedFor ? xForwardedFor.split(',')[0].trim() : '127.0.0.1';
 
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(
-        `SELECT set_config('app.current_tenant_id', $1, true), set_config('app.current_user_role', $2, true);`,
-        tenant.id,
-        'PLATFORM_OWNER'
-      );
+    const db = getTenantPrisma(tenant.id, 'PLATFORM_OWNER');
 
+    const result = await db.$transaction(async (tx) => {
       // 1. Fetch Customer
       const customer = await tx.customer.findUnique({
         where: { id: customerId },

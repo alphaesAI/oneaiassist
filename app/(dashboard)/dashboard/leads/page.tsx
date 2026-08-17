@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { io } from 'socket.io-client';
 
 interface Lead {
   id: string;
@@ -22,6 +23,10 @@ interface Lead {
     id: string;
     name: string;
     email: string;
+  } | null;
+  intakeSession?: {
+    collectedFields: any;
+    status: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
   } | null;
 }
 
@@ -46,6 +51,29 @@ export default function LeadsPage() {
   const queryClient = useQueryClient();
   const { data: info } = useTenantInfo();
   const tenantId = info?.tenantId;
+
+  // Socket.io Live Updates
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const socketInstance = io('http://localhost:3001', {
+      query: { tenantId },
+    });
+
+    socketInstance.on('lead_status_updated', (data: { leadId: string; status: string }) => {
+      console.log('[Socket] lead_status_updated event received:', data);
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    });
+
+    socketInstance.on('intake_progress_updated', (data: { leadId: string; collectedFields: any; progress: string }) => {
+      console.log('[Socket] intake_progress_updated event received:', data);
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    });
+
+    return () => {
+      socketInstance.disconnect();
+    };
+  }, [tenantId, queryClient]);
 
   // View state: 'kanban' or 'list'
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
@@ -362,6 +390,43 @@ export default function LeadsPage() {
                           <span className="material-symbols-outlined text-[12px]">call</span>
                           <span>{lead.customer.phone}</span>
                         </div>
+
+                        {/* Intake Progress Checkmarks */}
+                        {lead.intakeSession && (
+                          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 flex flex-col gap-1.5 mt-1">
+                            <div className="flex justify-between items-center text-[9px] font-bold text-[#49454f]">
+                              <span className="flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[11px] text-[#004ac6]">assignment</span>
+                                Intake Qualification
+                              </span>
+                              <span className="text-[#004ac6]">
+                                {(() => {
+                                  const fields = (lead.intakeSession.collectedFields as any) || {};
+                                  const required = ['age', 'state', 'healthConditions', 'budgetMin', 'budgetMax', 'familySize'];
+                                  const collected = Object.keys(fields).filter(
+                                    (k) => required.includes(k) && fields[k] !== undefined
+                                  );
+                                  return `${collected.length} of ${required.length}`;
+                                })()}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-200 h-1 rounded-full overflow-hidden">
+                              <div
+                                className="bg-[#004ac6] h-full rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${(() => {
+                                    const fields = (lead.intakeSession.collectedFields as any) || {};
+                                    const required = ['age', 'state', 'healthConditions', 'budgetMin', 'budgetMax', 'familySize'];
+                                    const collected = Object.keys(fields).filter(
+                                      (k) => required.includes(k) && fields[k] !== undefined
+                                    );
+                                    return (collected.length / required.length) * 100;
+                                  })()}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
 
                         <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
                           <span className="text-[9px] text-[#737686] italic font-semibold">

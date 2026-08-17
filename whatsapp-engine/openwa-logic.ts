@@ -206,19 +206,19 @@ export async function connectTenantOpenWA(tenantId: string, io: any) {
 
         // Only trigger AI auto-response if automation is still enabled (not STOP-listed)
         if (!isStopRequest && conversation.automationEnabled !== false) {
-          // Show composing typing indicator
           try {
-            await client.simulateTyping(remoteJid as any, true);
-          } catch (_) { /* non-critical */ }
-
-          try {
-            await runAIAgentAutoResponse(tenantId, conversation.id, io);
+            const db = getTenantPrisma(tenantId, 'ADMIN');
+            await db.inboundMessageJob.create({
+              data: {
+                tenantId,
+                conversationId: conversation.id,
+                messageId: newMsg.id,
+                status: 'PENDING',
+              },
+            });
+            console.log(`[OpenWA Engine] Enqueued inbound message job for conversation ${conversation.id}`);
           } catch (err) {
-            console.error(`[OpenWA Engine] AI response error for tenant ${tenantId}:`, err);
-          } finally {
-            try {
-              await client.simulateTyping(remoteJid as any, false);
-            } catch (_) { /* non-critical */ }
+            console.error(`[OpenWA Engine] AI response enqueue error for tenant ${tenantId}:`, err);
           }
         }
       } catch (err) {

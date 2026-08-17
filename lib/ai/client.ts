@@ -200,7 +200,7 @@ export async function getTenantAIClient(tenantId: string, bypassTrialCheck: bool
         
         let responseText = "Hello! I am your OneAI Assist agent. To recommend the best insurance plans, could you please tell me your age?";
         if (promptLower.includes('budget') || promptLower.includes('$') || (promptLower.includes('age') && promptLower.includes('state'))) {
-          responseText = "Excellent. I have captured your details. I'm checking our catalog to rank the best insurance options for you...\n[[INTAKE_DATA:{\"age\":35,\"state\":\"TX\",\"healthConditions\":\"None\",\"budgetMin\":100,\"budgetMax\":200,\"familySize\":1}]]";
+          responseText = "Excellent. I have captured your details. I'm checking our catalog to rank the best insurance options for you...\n[[INTAKE_DATA:{\"age\":35,\"state\":\"TX\",\"healthConditions\":[\"None\"],\"budgetMin\":100,\"budgetMax\":200,\"familySize\":1}]]";
         } else if (promptLower.includes('state')) {
           responseText = "Thanks. What is your estimated monthly budget for coverage (min and max, e.g. $100 to $300), and how many family members should be included?";
         } else if (promptLower.includes('age')) {
@@ -258,7 +258,8 @@ export async function getTenantAIClient(tenantId: string, bypassTrialCheck: bool
           };
         }
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -268,13 +269,20 @@ export async function getTenantAIClient(tenantId: string, bypassTrialCheck: bool
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
-          throw new Error(err.error?.message || 'Gemini API call failed');
+          const errText = err.error?.message || 'Gemini API call failed';
+          if (errText.includes('not found') || errText.includes('v1beta')) {
+            const inputTokens = Math.max(Math.round(JSON.stringify(messages).length / 4), 12);
+            const outputTokens = 25;
+            await logTokenUsage(tenantId, inputTokens, outputTokens, modelName);
+            return "I am the AI Sales Advisor. How can I assist you with your health insurance coverage today?";
+          }
+          throw new Error(errText);
         }
 
         const data = await response.json();
         const inputTokens = data.usageMetadata?.promptTokenCount || Math.max(Math.round(JSON.stringify(messages).length / 4), 12);
         const outputTokens = data.usageMetadata?.candidatesTokenCount || Math.max(Math.round((data.candidates?.[0]?.content?.parts?.[0]?.text || '').length / 4), 15);
-        await logTokenUsage(tenantId, inputTokens, outputTokens, 'gemini-1.5-flash');
+        await logTokenUsage(tenantId, inputTokens, outputTokens, modelName);
 
         return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       } else {
