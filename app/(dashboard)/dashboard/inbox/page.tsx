@@ -501,8 +501,15 @@ export default function InboxPage() {
                             {formatTimeString(msg.createdAt)}
                           </span>
                           {isOutbound && (
-                            <span className="material-symbols-outlined text-[12px] text-white/70">
-                              done_all
+                            <span
+                              className={cn(
+                                "material-symbols-outlined text-[12px]",
+                                msg.status === 'READ' ? "text-sky-300 font-bold" :
+                                msg.status === 'FAILED' ? "text-rose-300 font-bold" : "text-white/70"
+                              )}
+                              title={`Status: ${msg.status || 'SENT'}`}
+                            >
+                              {msg.status === 'FAILED' ? 'error' : msg.status === 'DELIVERED' || msg.status === 'READ' ? 'done_all' : 'done'}
                             </span>
                           )}
                         </div>
@@ -516,6 +523,14 @@ export default function InboxPage() {
 
             {/* Message Composer */}
             <footer className="p-4 bg-white border-t border-[#c3c6d7] space-y-4 shrink-0">
+              {sendReplyMutation.isError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center justify-between">
+                  <span>⚠️ Delivery Error: {(sendReplyMutation.error as Error)?.message || 'Failed to send WhatsApp message.'}</span>
+                  <button type="button" onClick={() => sendReplyMutation.reset()} className="text-xs text-rose-500 hover:text-rose-700 font-bold ml-2">
+                    Dismiss
+                  </button>
+                </div>
+              )}
               <form onSubmit={handleSend} className="flex items-center gap-3">
                 <button
                   type="button"
