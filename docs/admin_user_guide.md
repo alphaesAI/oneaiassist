@@ -38,6 +38,28 @@ The Live Chat Inbox provides real-time customer conversation management, turn-by
 
 ---
 
+### 2.1 Meta WhatsApp Business Cloud API Console (`/dashboard/settings` &rarr; WhatsApp Channels)
+
+Administrators can configure official **Meta WhatsApp Cloud API (Graph API v21.0)** credentials directly from the Admin Settings Console.
+
+![Meta WhatsApp Cloud API Console](./images/meta_cloud_api_form.png)
+
+#### Configurable Channel Options:
+- **Provider Engine Selector**: Dynamic toggle between:
+  1. **Baileys (WebSockets)** [`QR Web`]: Direct socket connection for rapid QR pairing.
+  2. **OpenWA (Chromium)** [`Headless`]: Headless browser session support.
+  3. **Meta Cloud API (Official API)** [`Graph API v21.0`]: Official Meta WhatsApp Business Account integration.
+
+#### Interactive Meta Credentials Form:
+- **Meta Phone Number ID**: Phone Number ID from Meta App Dashboard (e.g. `109876543210987`).
+- **WhatsApp Business Account ID (WABA ID)**: Account ID for template management (e.g. `987654321098765`).
+- **Permanent System User Access Token**: Encrypted System User token (`EAAG...`).
+- **Webhook Verification Secret Token**: Secret token string for Meta challenge handshake (`hub.challenge`).
+- **Webhook Callback URL**: Configured URL (`https://oneai.drgodly.com/api/webhook/meta`) to paste into Meta Developer Portal.
+- **Save & Connect Button**: **`Save & Connect Meta Cloud Line`** validates credentials, updates database, and sets channel status to `CONNECTED`.
+
+---
+
 ## 3. WhatsApp Template Manager (`/dashboard/templates`)
 
 The Template Manager enables administrators to create, test, and manage WhatsApp Business message templates with variable placeholders and call-to-action buttons.
