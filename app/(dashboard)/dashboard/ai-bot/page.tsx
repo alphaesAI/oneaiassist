@@ -110,6 +110,46 @@ export default function AiBotPage() {
   const [selectedQuestionId, setSelectedQuestionId] = useState<string>('q1');
   const [showSimulator, setShowSimulator] = useState(false);
 
+  const [isSavingIntake, setIsSavingIntake] = useState(false);
+  const [intakeSavedSuccess, setIntakeSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    async function loadIntakeFlow() {
+      try {
+        const res = await fetch('/api/bot-config/intake');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.questions) && data.questions.length > 0) {
+            setQuestions(data.questions);
+            setSelectedQuestionId(data.questions[0].id);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load intake flow:', err);
+      }
+    }
+    loadIntakeFlow();
+  }, []);
+
+  const saveIntakeFlow = async () => {
+    setIsSavingIntake(true);
+    try {
+      const res = await fetch('/api/bot-config/intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questions }),
+      });
+      if (res.ok) {
+        setIntakeSavedSuccess(true);
+        setTimeout(() => setIntakeSavedSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error('Failed to save intake flow:', err);
+    } finally {
+      setIsSavingIntake(false);
+    }
+  };
+
   const selectedQuestion = questions.find((q) => q.id === selectedQuestionId) || questions[0];
 
   const updateSelectedQuestion = (field: keyof Question, value: any) => {
@@ -225,14 +265,29 @@ export default function AiBotPage() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={addQuestionNode}
-              className="px-4 py-2 bg-[#004ac6] hover:bg-[#003da3] text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 transition"
-            >
-              <Plus className="w-4 h-4" />
-              Add Flow Node
-            </button>
+            <div className="flex items-center gap-3">
+              {intakeSavedSuccess && (
+                <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl animate-fade-in">
+                  ✓ Flow Saved Successfully!
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={saveIntakeFlow}
+                disabled={isSavingIntake}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 transition disabled:opacity-50"
+              >
+                {isSavingIntake ? 'Saving...' : 'Save Intake Flowchart'}
+              </button>
+              <button
+                type="button"
+                onClick={addQuestionNode}
+                className="px-4 py-2 bg-[#004ac6] hover:bg-[#003da3] text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 transition"
+              >
+                <Plus className="w-4 h-4" />
+                Add Flow Node
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

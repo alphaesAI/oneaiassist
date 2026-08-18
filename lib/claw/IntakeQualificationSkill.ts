@@ -243,7 +243,18 @@ Example: {"age": 35, "state": "TX"}`;
       return botReplyText;
     }
 
-    // 4. If fields are missing, request the next missing one in conversational turn
+    // 4. Load custom tenant intake flow questions if configured
+    let customFlowQuestions: any[] = [];
+    try {
+      const flow = await db.intakeFlow.findUnique({ where: { tenantId } });
+      if (flow && Array.isArray(flow.questions) && flow.questions.length > 0) {
+        customFlowQuestions = flow.questions as any[];
+      }
+    } catch (err) {
+      console.warn('[OpenClaw] Could not query custom IntakeFlow:', err);
+    }
+
+    // 5. Build missing fields prompt based on custom flow or standard defaults
     const missing: string[] = [];
     if (updatedFields.age === undefined) missing.push('Age (number of years)');
     if (updatedFields.state === undefined) missing.push('US State of residence (2-letter abbreviation)');
@@ -253,8 +264,13 @@ Example: {"age": 35, "state": "TX"}`;
     }
     if (updatedFields.familySize === undefined) missing.push('family size (total members covered including yourself)');
 
+    let customQuestionsBlock = '';
+    if (customFlowQuestions.length > 0) {
+      customQuestionsBlock = `Agency Custom Intake Steps:\n` + customFlowQuestions.map((q, idx) => `${idx + 1}. [${q.title}]: "${q.text}" (${q.type}${q.options?.length ? `, options: ${q.options.join('/')}` : ''})`).join('\n') + '\n\n';
+    }
+
     const prompt = `You are a professional insurance sales agent guide assisting a lead over WhatsApp.
-Your goal is to guide the conversation to collect 5 qualification details:
+${customQuestionsBlock}Your goal is to guide the conversation to collect qualification details:
 1. Age
 2. US State of residence
 3. Pre-existing health conditions
