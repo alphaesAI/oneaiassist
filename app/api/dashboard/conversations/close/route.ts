@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
-import { getTenantAIClient } from '@/lib/ai/TenantAIClient';
+import { getTenantAIClient } from '@/lib/ai/client';
 
 /**
  * Benchmarked against ForgeChat2 agentCloseSummary.js service:
