@@ -47,6 +47,10 @@ io.on('connection', (socket) => {
   });
 });
 
+// Import & Mount Meta Cloud API Webhook router
+import { createMetaWebhookRouter } from './routes/metaWebhook';
+app.use(createMetaWebhookRouter(io));
+
 // REST API: Initiate Connection & return QR Code / Pairing Code
 app.post('/api/whatsapp/connect', async (req, res) => {
   try {
