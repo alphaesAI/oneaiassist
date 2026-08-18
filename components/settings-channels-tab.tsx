@@ -261,8 +261,8 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
             Engine Selector & Connection Options
           </h4>
 
-          {/* Engine Choice */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Provider Engine Choice */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <button
               type="button"
               onClick={() => setEngine('BAILEYS')}
@@ -273,10 +273,10 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-bold text-[#1c1b1f]">Baileys (Direct WebSockets)</span>
-                <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">Recommended</span>
+                <span className="text-xs font-bold text-[#1c1b1f]">Baileys (WebSockets)</span>
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">QR Web</span>
               </div>
-              <p className="text-[11px] text-[#49454f]">High performance, lightweight socket engine. No Chromium overhead.</p>
+              <p className="text-[11px] text-[#49454f]">High performance, lightweight socket engine. Fast QR pair.</p>
             </button>
 
             <button
@@ -289,10 +289,26 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-bold text-[#1c1b1f]">OpenWA (Chromium Engine)</span>
-                <span className="text-[10px] font-bold text-gray-600 bg-gray-200 px-2 py-0.5 rounded-full">Browser Mode</span>
+                <span className="text-xs font-bold text-[#1c1b1f]">OpenWA (Chromium)</span>
+                <span className="text-[10px] font-bold text-gray-600 bg-gray-200 px-2 py-0.5 rounded-full">Headless</span>
               </div>
-              <p className="text-[11px] text-[#49454f]">Headless Chromium browser session with full web features.</p>
+              <p className="text-[11px] text-[#49454f]">Headless Chromium session with full web browser features.</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setEngine('META_CLOUD_API' as any)}
+              className={`p-4 rounded-xl border text-left transition ${
+                (engine as any) === 'META_CLOUD_API'
+                  ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-600/20'
+                  : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold text-[#1c1b1f]">Meta Cloud API</span>
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">Official API</span>
+              </div>
+              <p className="text-[11px] text-[#49454f]">Official Meta Graph REST API (WhatsApp Business Account).</p>
             </button>
           </div>
 
