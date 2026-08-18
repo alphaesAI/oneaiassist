@@ -188,7 +188,8 @@ export async function getTenantAIClient(tenantId: string, bypassTrialCheck: bool
   const isMock = apiKey.startsWith('sk-mock') || !apiKey;
 
   return {
-    generateChat: async (messages: ChatMessage[]): Promise<string> => {
+    generateChat: async (arg1: any, arg2?: any): Promise<string> => {
+      const messages: ChatMessage[] = Array.isArray(arg1) ? arg1 : (Array.isArray(arg2) ? arg2 : []);
       // 1. Enforce tier rate limits first
       await checkRateLimit(tenantId);
 
@@ -199,7 +200,9 @@ export async function getTenantAIClient(tenantId: string, bypassTrialCheck: bool
         const promptLower = userPrompt.toLowerCase();
         
         let responseText = "Hello! I am your OneAI Assist agent. To recommend the best insurance plans, could you please tell me your age?";
-        if (promptLower.includes('budget') || promptLower.includes('$') || (promptLower.includes('age') && promptLower.includes('state'))) {
+        if (promptLower.includes('data extraction bot') || promptLower.includes('extract insurance qualification fields')) {
+          responseText = '{"age":35,"state":"TX","healthConditions":["None"],"budgetMin":100,"budgetMax":200,"familySize":1}';
+        } else if (promptLower.includes('budget') || promptLower.includes('$') || (promptLower.includes('age') && promptLower.includes('state'))) {
           responseText = "Excellent. I have captured your details. I'm checking our catalog to rank the best insurance options for you...\n[[INTAKE_DATA:{\"age\":35,\"state\":\"TX\",\"healthConditions\":[\"None\"],\"budgetMin\":100,\"budgetMax\":200,\"familySize\":1}]]";
         } else if (promptLower.includes('state')) {
           responseText = "Thanks. What is your estimated monthly budget for coverage (min and max, e.g. $100 to $300), and how many family members should be included?";

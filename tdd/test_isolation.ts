@@ -10,29 +10,17 @@ async function run() {
   // 1. Clean up any previous test records to ensure idempotency
   console.log('\n[1/5] Cleaning up old test records (RLS-compliant)...');
   
-  // Retrieve existing test tenants first (Tenant has no RLS policies)
-  const oldTenants = await prisma.tenant.findMany({
-    where: { slug: { in: ['tenant-a', 'tenant-b'] } },
-  });
-
-  for (const tenant of oldTenants) {
-    const dbTenant = getTenantPrisma(tenant.id, 'TENANT_ADMIN');
-    
-    // Delete customers using the tenant-scoped client
-    await dbTenant.customer.deleteMany({
-      where: { displayName: { in: ['Test Contact A', 'Test Contact B'] } },
-    });
-    
-    // Delete users using the tenant-scoped client
-    await dbTenant.user.deleteMany({
-      where: { email: { in: ['admin@tenant-a.com', 'admin@tenant-b.com'] } },
-    });
-  }
-
-  // Delete the tenants themselves (Tenant table has no RLS)
-  await prisma.tenant.deleteMany({
-    where: { slug: { in: ['tenant-a', 'tenant-b'] } },
-  });
+  // Execute global cleanup bypassing RLS as PLATFORM_OWNER in raw SQL
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      PERFORM set_config('app.current_user_role', 'PLATFORM_OWNER', false);
+      UPDATE "public"."Policy" SET "confirmedByUserId" = NULL WHERE "confirmedByUserId" IN (SELECT id FROM "public"."User" WHERE email IN ('admin@tenant-a.com', 'admin@tenant-b.com'));
+      DELETE FROM "public"."AuditLog" WHERE "userId" IN (SELECT id FROM "public"."User" WHERE email IN ('admin@tenant-a.com', 'admin@tenant-b.com'));
+      DELETE FROM "public"."User" WHERE email IN ('admin@tenant-a.com', 'admin@tenant-b.com');
+      DELETE FROM "public"."Customer" WHERE "displayName" IN ('Test Contact A', 'Test Contact B');
+      DELETE FROM "public"."Tenant" WHERE slug IN ('tenant-a', 'tenant-b');
+    END $$;
+  `);
   console.log('Cleanup completed.');
 
   // 2. Create Tenant A + Admin + Contact
@@ -135,4 +123,20 @@ run()
     console.error('\n❌ Verification failed with error:', err);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    try {
+      await prisma.$executeRawUnsafe(`
+        DO $$ BEGIN
+          PERFORM set_config('app.current_user_role', 'PLATFORM_OWNER', false);
+          UPDATE "public"."Policy" SET "confirmedByUserId" = NULL WHERE "confirmedByUserId" IN (SELECT id FROM "public"."User" WHERE email IN ('admin@tenant-a.com', 'admin@tenant-b.com'));
+          DELETE FROM "public"."AuditLog" WHERE "userId" IN (SELECT id FROM "public"."User" WHERE email IN ('admin@tenant-a.com', 'admin@tenant-b.com'));
+          DELETE FROM "public"."User" WHERE email IN ('admin@tenant-a.com', 'admin@tenant-b.com');
+          DELETE FROM "public"."Customer" WHERE "displayName" IN ('Test Contact A', 'Test Contact B');
+          DELETE FROM "public"."Tenant" WHERE slug IN ('tenant-a', 'tenant-b');
+        END $$;
+      `);
+    } catch {
+      // ignore cleanup error
+    }
+    await prisma.$disconnect();
+  });

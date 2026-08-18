@@ -169,6 +169,7 @@ export default function LeadsPage() {
       setNewLeadValue('');
       setNewLeadAgent('');
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
     },
   });
 

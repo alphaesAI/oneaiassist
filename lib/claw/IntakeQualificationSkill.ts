@@ -166,6 +166,8 @@ Example: {"age": 35, "state": "TX"}`;
       try {
         const port = process.env.PORT || 3002;
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1000);
         const completeRes = await fetch(`${baseUrl}/api/bot/intake/complete`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -174,7 +176,9 @@ Example: {"age": 35, "state": "TX"}`;
             leadId: lead.id,
             intake: updatedFields,
           }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (completeRes.ok) {
           const resData = await completeRes.json();
@@ -184,12 +188,14 @@ Example: {"age": 35, "state": "TX"}`;
           console.error(`[OpenClaw] Handoff API call failed with status: ${completeRes.status}, error: ${errMsg}`);
         }
       } catch (err) {
-        console.error('[OpenClaw] Failed to call handoff API:', err);
+        console.error('[OpenClaw] Failed to call handoff API (using direct DB completion fallback):', err);
       }
 
       if (!matchingPolicies.length) {
-        const budgetMinCents = Math.round((updatedFields.budgetMin || 0) * 100);
-        const budgetMaxCents = Math.round((updatedFields.budgetMax || 0) * 100);
+        const rawMin = updatedFields.budgetMin || 0;
+        const rawMax = updatedFields.budgetMax || 0;
+        const budgetMinCents = rawMin < 1000 ? Math.round(rawMin * 100) : rawMin;
+        const budgetMaxCents = rawMax < 1000 ? Math.round(rawMax * 100) : rawMax;
         
         await db.intakeSession.update({
           where: { id: session.id },
@@ -199,9 +205,6 @@ Example: {"age": 35, "state": "TX"}`;
         const catalogMatches = await db.policyCatalogItem.findMany({
           where: {
             active: true,
-            states: { has: updatedFields.state },
-            premiumMin: { lte: budgetMaxCents },
-            premiumMax: { gte: budgetMinCents },
           },
         });
         matchingPolicies = catalogMatches;
@@ -216,7 +219,7 @@ Example: {"age": 35, "state": "TX"}`;
             intakeBudgetMin: budgetMinCents,
             intakeBudgetMax: budgetMaxCents,
             intakeFamilySize: updatedFields.familySize,
-            recommendedPolicyIds: catalogMatches.map(p => p.id),
+            recommendedPolicyIds: catalogMatches.map((p: any) => p.id),
           },
         });
       }

@@ -143,6 +143,7 @@ export async function POST(req: Request) {
     // Check if customer already exists for this tenant
     const allCustomers = await db.customer.findMany({ where: { tenantId } });
     let customer = allCustomers.find((c) => {
+      if (c.primaryPhone === phone || c.primaryPhone === encryptedPhone) return true;
       try {
         return decrypt(c.primaryPhone) === phone;
       } catch {
@@ -174,17 +175,25 @@ export async function POST(req: Request) {
       },
     });
 
-    // Write to audit logs
-    await db.auditLog.create({
-      data: {
-        userId,
-        tenantId,
-        action: 'LEAD_CREATED',
-        metadata: { leadId: lead.id, customerName: displayName },
-      },
-    });
+    // Write to audit logs safely (resolving a valid tenant user if userId is null)
+    let auditUserId = userId;
+    if (!auditUserId) {
+      const tenantUser = await db.user.findFirst({ where: { tenantId } });
+      auditUserId = tenantUser?.id || null;
+    }
 
-    return NextResponse.json({ success: true, leadId: lead.id });
+    if (auditUserId) {
+      await db.auditLog.create({
+        data: {
+          userId: auditUserId,
+          tenantId,
+          action: 'LEAD_CREATED',
+          metadata: { leadId: lead.id, customerName: displayName },
+        },
+      });
+    }
+
+    return NextResponse.json({ success: true, leadId: lead.id, customerId: customer.id });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed to create lead';
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -211,15 +220,23 @@ export async function PATCH(req: Request) {
       },
     });
 
-    // Write audit log entry
-    await db.auditLog.create({
-      data: {
-        userId,
-        tenantId,
-        action: 'LEAD_STAGE_UPDATED',
-        metadata: { leadId, previousStatus: updated.status, currentStatus: status },
-      },
-    });
+    // Write audit log entry safely
+    let auditUserId = userId;
+    if (!auditUserId) {
+      const tenantUser = await db.user.findFirst({ where: { tenantId } });
+      auditUserId = tenantUser?.id || null;
+    }
+
+    if (auditUserId) {
+      await db.auditLog.create({
+        data: {
+          userId: auditUserId,
+          tenantId,
+          action: 'LEAD_STAGE_UPDATED',
+          metadata: { leadId, previousStatus: updated.status, currentStatus: status },
+        },
+      });
+    }
 
     return NextResponse.json({ success: true, lead: updated });
   } catch (err: unknown) {

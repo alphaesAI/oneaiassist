@@ -1,44 +1,34 @@
 import 'dotenv/config';
-import { prisma } from '../lib/db/index';
+import { prisma, getTenantPrisma } from '../lib/db/index';
 import { hash } from 'bcryptjs';
-
-// Helper to set role and tenant in session for RLS compliance during seeding
-async function runWithRLSContext(tenantId: string, role: string, fn: () => Promise<void>) {
-  await prisma.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe(
-      `SELECT set_config('app.current_tenant_id', $1, true), set_config('app.current_user_role', $2, true);`,
-      tenantId,
-      role
-    );
-    await fn();
-  });
-}
 
 async function main() {
   console.log('Seeding database with foundation data...');
 
   // 1. Clean up existing records to ensure seed run is clean
-  // We execute raw delete queries or bypass RLS using PLATFORM_OWNER
-  await prisma.$executeRawUnsafe(`SELECT set_config('app.current_user_role', 'PLATFORM_OWNER', true);`);
-  
-  await prisma.auditLog.deleteMany({});
-  await prisma.template.deleteMany({});
-  await prisma.broadcastJob.deleteMany({});
-  await prisma.broadcastCampaign.deleteMany({});
-  await prisma.reminderJob.deleteMany({});
-  await prisma.policyDocumentChunk.deleteMany({});
-  await prisma.policy.deleteMany({});
-  await prisma.policyCatalogItem.deleteMany({});
-  await prisma.application.deleteMany({});
-  await prisma.lead.deleteMany({});
-  await prisma.message.deleteMany({});
-  await prisma.conversation.deleteMany({});
-  await prisma.customerChannel.deleteMany({});
-  await prisma.customer.deleteMany({});
-  await prisma.tenantAIConfig.deleteMany({});
-  await prisma.whatsAppNumber.deleteMany({});
-  await prisma.user.deleteMany({});
-  await prisma.tenant.deleteMany({});
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      PERFORM set_config('app.current_user_role', 'PLATFORM_OWNER', false);
+      DELETE FROM "public"."AuditLog";
+      DELETE FROM "public"."Template";
+      DELETE FROM "public"."BroadcastJob";
+      DELETE FROM "public"."BroadcastCampaign";
+      DELETE FROM "public"."ReminderJob";
+      DELETE FROM "public"."PolicyDocumentChunk";
+      DELETE FROM "public"."Policy";
+      DELETE FROM "public"."PolicyCatalogItem";
+      DELETE FROM "public"."Application";
+      DELETE FROM "public"."Lead";
+      DELETE FROM "public"."Message";
+      DELETE FROM "public"."Conversation";
+      DELETE FROM "public"."CustomerChannel";
+      DELETE FROM "public"."Customer";
+      DELETE FROM "public"."TenantAIConfig";
+      DELETE FROM "public"."WhatsAppNumber";
+      DELETE FROM "public"."User";
+      DELETE FROM "public"."Tenant";
+    END $$;
+  `);
 
   console.log('Database cleanup completed.');
 
@@ -70,11 +60,14 @@ async function main() {
   });
   console.log(`Tenant created: ${tenant.name} (${tenant.id})`);
 
+  // Obtain tenant-scoped Prisma client for RLS compliance
+  const db = getTenantPrisma(tenant.id, 'ADMIN');
+
   // Define hashes for users
   const hashedPassword = await hash('password123', 10);
 
-  // 3. Create Users under Tenant (Bypassing RLS via PLATFORM_OWNER session)
-  const adminUser = await prisma.user.create({
+  // 3. Create Users under Tenant
+  const adminUser = await db.user.create({
     data: {
       email: 'admin@agency.com',
       hashedPassword,
@@ -85,7 +78,7 @@ async function main() {
     },
   });
 
-  const managerUser = await prisma.user.create({
+  const managerUser = await db.user.create({
     data: {
       email: 'manager@agency.com',
       hashedPassword,
@@ -95,7 +88,7 @@ async function main() {
     },
   });
 
-  const agentUser = await prisma.user.create({
+  const agentUser = await db.user.create({
     data: {
       email: 'agent@agency.com',
       hashedPassword,
@@ -105,10 +98,21 @@ async function main() {
     },
   });
 
-  console.log('Admin, Manager, and Agent users created successfully.');
+  const pmeUser = await db.user.create({
+    data: {
+      email: 'admin@primemarketingexperts.com',
+      hashedPassword,
+      role: 'ADMIN',
+      tenantId: tenant.id,
+      totpSecret: 'JBSWY3DPEHPK3PXP',
+      twoFactorEnabled: false,
+    },
+  });
+
+  console.log('Admin, PME Admin, Manager, and Agent users created successfully.');
 
   // 4. Create Policy Catalog Items
-  const policyCatalog1 = await prisma.policyCatalogItem.create({
+  const policyCatalog1 = await db.policyCatalogItem.create({
     data: {
       tenantId: tenant.id,
       policyId: 'POL-HEALTH-001',
@@ -124,7 +128,7 @@ async function main() {
     },
   });
 
-  const policyCatalog2 = await prisma.policyCatalogItem.create({
+  const policyCatalog2 = await db.policyCatalogItem.create({
     data: {
       tenantId: tenant.id,
       policyId: 'POL-HEALTH-002',
@@ -142,7 +146,7 @@ async function main() {
   console.log('Policy Catalog Items seeded.');
 
   // 5. Create Customers
-  const customerA = await prisma.customer.create({
+  const customerA = await db.customer.create({
     data: {
       tenantId: tenant.id,
       displayName: 'Marcus Thorne',
@@ -153,7 +157,7 @@ async function main() {
     },
   });
 
-  const customerB = await prisma.customer.create({
+  const customerB = await db.customer.create({
     data: {
       tenantId: tenant.id,
       displayName: 'Jane Miller',
@@ -166,12 +170,12 @@ async function main() {
   console.log('Customers seeded.');
 
   // 6. Create Leads
-  const leadA = await prisma.lead.create({
+  const leadA = await db.lead.create({
     data: {
       tenantId: tenant.id,
       customerId: customerA.id,
       status: 'NEW',
-      source: 'WhatsApp',
+      source: 'WhatsApp Broadcast',
       campaignId: 'CAMP-YOUTUBE-001',
       intakeAge: 34,
       intakeState: 'CA',
@@ -182,7 +186,7 @@ async function main() {
     },
   });
 
-  const leadB = await prisma.lead.create({
+  const leadB = await db.lead.create({
     data: {
       tenantId: tenant.id,
       customerId: customerB.id,
@@ -199,7 +203,7 @@ async function main() {
   console.log('Leads seeded.');
 
   // 7. Create Conversations & Messages
-  const conversationA = await prisma.conversation.create({
+  const conversationA = await db.conversation.create({
     data: {
       tenantId: tenant.id,
       customerId: customerA.id,
@@ -209,7 +213,7 @@ async function main() {
     },
   });
 
-  await prisma.message.createMany({
+  await db.message.createMany({
     data: [
       {
         tenantId: tenant.id,
@@ -238,7 +242,7 @@ async function main() {
     ],
   });
 
-  const conversationB = await prisma.conversation.create({
+  const conversationB = await db.conversation.create({
     data: {
       tenantId: tenant.id,
       customerId: customerB.id,
@@ -248,7 +252,7 @@ async function main() {
     },
   });
 
-  await prisma.message.createMany({
+  await db.message.createMany({
     data: [
       {
         tenantId: tenant.id,
@@ -272,7 +276,7 @@ async function main() {
   console.log('Conversations and messages seeded.');
 
   // 8. Create Templates
-  await prisma.template.create({
+  await db.template.create({
     data: {
       tenantId: tenant.id,
       name: 'Welcome Template',
