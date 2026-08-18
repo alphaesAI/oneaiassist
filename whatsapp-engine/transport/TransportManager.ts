@@ -5,7 +5,15 @@ import { getTenantPrisma } from '../../lib/db/index';
 import { jidNormalizedUser } from '@whiskeysockets/baileys';
 
 function toJid(to: string): string {
-  return to.includes('@') ? to : `${to.replace(/[^\d]/g, '')}@s.whatsapp.net`;
+  if (to.includes('@')) return to;
+  let digits = to.replace(/[^\d]/g, '');
+  // Auto-prefix 10-digit Indian mobile numbers (starting with 6,7,8,9) with country code '91'
+  if (digits.length === 10 && /^[6-9]/.test(digits)) {
+    digits = `91${digits}`;
+  } else if (digits.length === 10) {
+    digits = `1${digits}`;
+  }
+  return `${digits}@s.whatsapp.net`;
 }
 
 export class BaileysTransportAdapter implements IMessageTransport {
