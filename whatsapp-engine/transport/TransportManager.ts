@@ -49,6 +49,16 @@ export class BaileysTransportAdapter implements IMessageTransport {
     return { messageId: sent?.key.id ?? '' };
   }
 
+  async sendAudio(to: string, opts: { filePath: string; ptt?: boolean }): Promise<SendResult> {
+    const jid = toJid(to);
+    const sent = await this.sock.sendMessage(jid, {
+      audio: { url: opts.filePath },
+      mimetype: 'audio/ogg; codecs=opus',
+      ptt: opts.ptt ?? true,
+    });
+    return { messageId: sent?.key.id ?? '' };
+  }
+
   async setTyping(to: string, on: boolean): Promise<void> {
     try {
       await this.sock.sendPresenceUpdate(on ? 'composing' : 'paused', toJid(to));
@@ -95,6 +105,12 @@ export class OpenWATransportAdapter implements IMessageTransport {
   async sendVideo(to: string, opts: { filePath: string; caption?: string }): Promise<SendResult> {
     const jid = toJid(to);
     const res = await this.client.sendVideo(jid, opts.filePath, 'video', opts.caption ?? '');
+    return { messageId: typeof res === 'string' ? res : '' };
+  }
+
+  async sendAudio(to: string, opts: { filePath: string; ptt?: boolean }): Promise<SendResult> {
+    const jid = toJid(to);
+    const res = await this.client.sendPtt(jid, opts.filePath);
     return { messageId: typeof res === 'string' ? res : '' };
   }
 

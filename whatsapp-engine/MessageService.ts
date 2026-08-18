@@ -1,8 +1,37 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { getTenantPrisma } from '../lib/db/index';
 import { TransportManager } from './transport/TransportManager';
 import { decrypt } from '../lib/encryption';
+
+const pexecFile = promisify(execFile);
+
+/**
+ * Transcodes browser webm audio recordings or generic audio files to native WhatsApp ogg/opus using FFmpeg.
+ */
+export async function transcodeAudioForWhatsApp(srcFilePath: string): Promise<string> {
+  if (!fs.existsSync(srcFilePath)) return srcFilePath;
+
+  const outFilePath = `${srcFilePath}.ogg`;
+  try {
+    await pexecFile('ffmpeg', [
+      '-y', '-loglevel', 'error',
+      '-i', srcFilePath,
+      '-vn', '-c:a', 'libopus', '-b:a', '64k',
+      outFilePath,
+    ]);
+    if (fs.existsSync(outFilePath) && fs.statSync(outFilePath).size > 0) {
+      console.log(`[AudioTranscoder] Successfully transcoded ${srcFilePath} to WhatsApp ogg/opus: ${outFilePath}`);
+      return outFilePath;
+    }
+  } catch (err: any) {
+    console.warn(`[AudioTranscoder] FFmpeg transcoding unavailable or failed (${err?.message || err}). Sending raw file.`);
+  }
+
+  return srcFilePath;
+}
 
 function findMediaFile(mediaId: string): string | null {
   const mediaDir = path.join(__dirname, '../public/media');
@@ -75,6 +104,13 @@ export class MessageService {
             caption: params.text,
           });
           messageType = 'VIDEO';
+        } else if (params.mimeType.startsWith('audio/')) {
+          const finalAudioPath = await transcodeAudioForWhatsApp(localFilePath);
+          result = await transport.sendAudio(targetPhone, {
+            filePath: finalAudioPath,
+            ptt: true,
+          });
+          messageType = 'OTHER';
         } else {
           throw new Error(`Unsupported MIME type: ${params.mimeType}`);
         }

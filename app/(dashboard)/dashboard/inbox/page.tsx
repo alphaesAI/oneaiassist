@@ -56,9 +56,43 @@ export default function InboxPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false);
   const [isIntakeExpanded, setIsIntakeExpanded] = useState(true);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const messageEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<any>(null);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      mediaRecorderRef.current.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      alert('Microphone access is required to record voice notes.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    }
+  };
 
   // 1. Fetch conversations via TanStack Query
   const { data: conversations, isLoading: convsLoading } = useQuery<Conversation[]>({
@@ -540,10 +574,21 @@ export default function InboxPage() {
                 </button>
                 <button
                   type="button"
-                  className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-[#49454f]"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={cn(
+                    "w-9 h-9 rounded-full flex items-center justify-center transition-colors",
+                    isRecording ? "bg-rose-500 text-white animate-pulse" : "hover:bg-slate-100 text-[#49454f]"
+                  )}
+                  title={isRecording ? "Stop Recording Voice Note" : "Record Voice Note"}
                 >
-                  <span className="material-symbols-outlined text-[20px]">mood</span>
+                  <span className="material-symbols-outlined text-[20px]">{isRecording ? "mic_off" : "mic"}</span>
                 </button>
+                {isRecording && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-rose-50 border border-rose-200 rounded-full text-rose-600 text-xs font-semibold animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    <span>Recording Voice Note... ({recordingSeconds}s)</span>
+                  </div>
+                )}
                 <div className="flex-1 relative">
                   <textarea
                     rows={2}
