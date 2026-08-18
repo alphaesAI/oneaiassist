@@ -4,7 +4,7 @@ import { openwaSessions, openwaQrCodes } from '../openwa-logic';
 import { getTenantPrisma } from '../../lib/db/index';
 import { jidNormalizedUser } from '@whiskeysockets/baileys';
 
-function toJid(to: string): string {
+export function toJid(to: string): string {
   if (to.includes('@')) return to;
   let digits = to.replace(/[^\d]/g, '');
   // Auto-prefix 10-digit Indian mobile numbers (starting with 6,7,8,9) with country code '91'

@@ -8,6 +8,7 @@ import pino from 'pino';
 import { Boom } from '@hapi/boom';
 import { WhatsAppNormalizer } from './WhatsAppNormalizer';
 import { IntakeQualificationSkill } from '../lib/claw/IntakeQualificationSkill';
+import { toJid } from './transport/TransportManager';
 
 export const sessions = new Map<string, any>();
 export const qrCodes = new Map<string, string>();
@@ -209,7 +210,7 @@ export async function runAIAgentAutoResponse(tenantId: string, conversationId: s
   // 3. Initialize AI Client
   let aiClient;
   try {
-    aiClient = await getTenantAIClient(tenantId);
+    aiClient = await getTenantAIClient(tenantId, true);
   } catch (err: any) {
     if (err.message === 'TrialLimitExceeded') {
       console.log(`[AI Agent] Trial limit exceeded for tenant ${tenantId}. Disabling auto-response toggle.`);
@@ -265,8 +266,15 @@ export async function runAIAgentAutoResponse(tenantId: string, conversationId: s
       const sock = sessions.get(tenantId);
       if (sock) {
         try {
-          const cleanPhone = decrypt(conversation.customer.primaryPhone).replace(/[^0-9]/g, '');
-          const jid = `${cleanPhone}@s.whatsapp.net`;
+          let targetPhone = conversation.customer.primaryPhone;
+          if (targetPhone && (targetPhone.includes(':') || targetPhone.length > 25)) {
+            try {
+              targetPhone = decrypt(targetPhone);
+            } catch (err) {
+              console.warn(`[AI Agent] Decryption warning for phone: ${targetPhone}`);
+            }
+          }
+          const jid = toJid(targetPhone);
 
           // Outbound dispatch
           const result = await sock.sendMessage(jid, { text: botReplyText });
@@ -563,18 +571,36 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
 
         await db.$transaction(async (tx) => {
           // 1. Identity Unification Check
-          const customers = await tx.customer.findMany();
+          const customers = await tx.customer.findMany({ where: { tenantId } });
           let targetCustomer = null;
+          const normRawPhone = rawPhone.replace(/[^\d]/g, '');
+          const targetJid = toJid(rawPhone);
 
           for (const c of customers) {
             try {
-              const decPhone = decrypt(c.primaryPhone);
-              if (decPhone === rawPhone) {
+              let decPhone = c.primaryPhone;
+              if (c.primaryPhone && (c.primaryPhone.includes(':') || c.primaryPhone.length > 25)) {
+                try {
+                  decPhone = decrypt(c.primaryPhone);
+                } catch {
+                  decPhone = c.primaryPhone;
+                }
+              }
+
+              const normDecPhone = decPhone.replace(/[^\d]/g, '');
+
+              if (
+                decPhone === rawPhone ||
+                normDecPhone === normRawPhone ||
+                toJid(decPhone) === targetJid ||
+                (normDecPhone.length >= 10 && normRawPhone.endsWith(normDecPhone.slice(-10))) ||
+                (normRawPhone.length >= 10 && normDecPhone.endsWith(normRawPhone.slice(-10)))
+              ) {
                 targetCustomer = c;
                 break;
               }
             } catch (e) {
-              // Ignore decryption failures
+              // Ignore failures
             }
           }
 
