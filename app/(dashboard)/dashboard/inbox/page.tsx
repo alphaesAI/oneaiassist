@@ -170,6 +170,24 @@ export default function InboxPage() {
     },
   });
 
+  // 6. Close conversation & generate AI summary mutation
+  const closeConversationMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedConvId) return;
+      const res = await fetch('/api/dashboard/conversations/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: selectedConvId }),
+      });
+      if (!res.ok) throw new Error('Failed to close conversation');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['messages', selectedConvId] });
+    },
+  });
+
   // 6. Socket.io Live Setup
   useEffect(() => {
     if (!tenantId) return;
@@ -457,8 +475,17 @@ export default function InboxPage() {
                 </div>
               </div>
 
-              {/* AI/Agent Handling Toggle Switch */}
-              <div className="flex items-center gap-4">
+              {/* AI/Agent Handling Toggle Switch & Close Summary */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => closeConversationMutation.mutate()}
+                  disabled={closeConversationMutation.isPending || selectedConv?.status === 'CLOSED'}
+                  className="px-3 py-1.5 rounded-lg text-[9px] font-bold bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-50 flex items-center gap-1 transition-all shadow-sm"
+                  title="Close conversation and generate AI summary note"
+                >
+                  <span className="material-symbols-outlined text-[13px]">summarize</span>
+                  <span>{closeConversationMutation.isPending ? 'Summarizing...' : selectedConv?.status === 'CLOSED' ? 'Closed' : 'Close & AI Summary'}</span>
+                </button>
                 <div className="flex items-center gap-2 bg-slate-50 border border-[#c3c6d7] p-1 rounded-lg">
                   <button
                     onClick={() => {
@@ -523,6 +550,25 @@ export default function InboxPage() {
                             : 'bg-white border-[#c3c6d7]/70 text-[#1c1b1f] rounded-tl-none'
                         )}
                       >
+                        {msg.contextMessageId && (() => {
+                          const parentMsg = messages?.find(
+                            (m) => m.id === msg.contextMessageId || m.channelMessageId === msg.contextMessageId
+                          );
+                          if (!parentMsg) return null;
+                          return (
+                            <div className={cn(
+                              "mb-2 p-2 rounded-lg text-[10px] border-l-4 truncate max-w-full",
+                              isOutbound
+                                ? "bg-white/15 border-white text-white/95"
+                                : "bg-slate-100 border-[#004ac6] text-slate-800"
+                            )}>
+                              <span className="font-bold block text-[9px] opacity-80 mb-0.5">
+                                Quoting {parentMsg.senderType === 'AGENT' ? 'Agent' : parentMsg.senderType === 'BOT' ? 'AI Assistant' : 'Customer'}:
+                              </span>
+                              <p className="truncate italic">"{parentMsg.content}"</p>
+                            </div>
+                          );
+                        })()}
                         <p className="break-words font-medium">{msg.content}</p>
                         <div className="flex items-center justify-end gap-1 mt-2">
                           <span
