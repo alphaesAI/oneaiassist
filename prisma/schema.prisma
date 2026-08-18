@@ -313,6 +313,7 @@ model Message {
   clientMessageId   String?          @unique
   providerMessageId String?
   mediaId           String?
+  contextMessageId  String?
   sentAt            DateTime?
   deliveredAt       DateTime?
   readAt            DateTime?

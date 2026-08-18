@@ -74,8 +74,18 @@ export async function handleMessageStatusUpdate(
 
     if (!message) return;
 
-    // Do not downgrade if already READ
-    if (message.status === 'READ' && newStatus === 'DELIVERED') {
+    // Enforce monotonic rank advancement: status must only advance (never downgrade)
+    const STATUS_RANK: Record<string, number> = {
+      SENT: 1,
+      DELIVERED: 2,
+      FAILED: 2,
+      READ: 3,
+    };
+
+    const currentRank = STATUS_RANK[message.status] || 0;
+    const newRank = STATUS_RANK[newStatus] || 0;
+
+    if (currentRank > newRank) {
       return;
     }
 
@@ -687,6 +697,7 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
               channelMessageId: norm.messageId,
               messageType: norm.messageType === 'OTHER' ? 'OTHER' : norm.messageType,
               status: messageStatus,
+              contextMessageId: norm.contextMessageId || null,
             },
           });
           createdMessage = message;

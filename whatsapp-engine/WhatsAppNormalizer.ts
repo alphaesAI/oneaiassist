@@ -6,6 +6,7 @@ export interface CanonicalMessage {
   participant?: string;
   pushName?: string;
   messageType: 'TEXT' | 'IMAGE' | 'VIDEO' | 'OTHER';
+  contextMessageId?: string;
 }
 
 export class WhatsAppNormalizer {
@@ -17,6 +18,13 @@ export class WhatsAppNormalizer {
     const fromMe = !!msg.key.fromMe;
     const participant = msg.key.participant || undefined;
     const pushName = msg.pushName || undefined;
+
+    // Extract quoted context message ID if present
+    const contextMessageId =
+      msg.message.extendedTextMessage?.contextInfo?.stanzaId ||
+      msg.message.imageMessage?.contextInfo?.stanzaId ||
+      msg.message.videoMessage?.contextInfo?.stanzaId ||
+      undefined;
 
     // Extract text from conversation or extended text message
     let text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
@@ -40,6 +48,7 @@ export class WhatsAppNormalizer {
       participant,
       pushName,
       messageType,
+      contextMessageId,
     };
   }
 
