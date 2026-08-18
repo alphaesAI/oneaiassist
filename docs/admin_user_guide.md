@@ -24,7 +24,21 @@ This user documentation details all features, operational workflows, and verifie
 
 ---
 
-## 2. WhatsApp Template Manager (`/dashboard/templates`)
+## 2. Live Chat Inbox & WhatsApp Messaging Engine (`/dashboard/inbox`)
+
+The Live Chat Inbox provides real-time customer conversation management, turn-by-turn AI intake monitoring, voice note recording, and message delivery status tracking.
+
+### Key Capabilities & Upgrades
+- **Normalized E.164 Phone Matching & Identity Unification**: Automatically normalizes incoming WhatsApp digits (`replace(/[^\d]/g, '')`), matching incoming numbers (`918220850596` / `15550183`) with existing encrypted customer database records (`+91 82208 50596` / `+1 555-0183`) to eliminate duplicate customer and conversation thread creation.
+- **Real-Time Delivery Status Ticks & Monotonic Rank Advancement**: Outbound messages display real-time status indicators (`SENT` grey single tick &rarr; `DELIVERED` double tick &rarr; `READ` sky-blue double tick &rarr; `FAILED` red error alert). Enforces monotonic status rank ordering (`SENT: 1`, `DELIVERED: 2`, `READ: 3`) to prevent out-of-order webhooks from overwriting read receipts.
+- **Voice Note Recording & FFmpeg Audio Transcoding**: Integrated microphone recording button (`mic` / `mic_off`) in the message composer with a real-time pulsing timer. Transcodes browser microphone recordings (`audio/webm`) into native WhatsApp voice notes (`audio/ogg; codecs=opus`) via FFmpeg.
+- **Quoted Reply Context & Parent Message Previews**: Parses WhatsApp `contextInfo.stanzaId` (`contextMessageId`) when customers reply to a specific message, rendering styled quoted preview bubbles directly inside the chat timeline above message replies.
+- **AI Conversation Close & Automated LLM Summarization**: Clicking the **"Close & AI Summary"** button in the thread header triggers an LLM analysis of the chat transcript. Generates a 2-sentence summary of customer intent, resolution, and open actions, inserting a system summary note (`📌 AI Close Summary: ...`) into the timeline.
+- **24-Hour Customer Service Window Guardrails**: Tracks customer inactivity since their last inbound message (`lastInboundMessageAt`). Warns agents when the 24-hour service window expires and provides single-click access to approved **WhatsApp HSM Templates** to re-open the communication channel.
+
+---
+
+## 3. WhatsApp Template Manager (`/dashboard/templates`)
 
 The Template Manager enables administrators to create, test, and manage WhatsApp Business message templates with variable placeholders and call-to-action buttons.
 
