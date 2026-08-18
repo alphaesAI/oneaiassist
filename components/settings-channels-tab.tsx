@@ -44,6 +44,7 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
   const [metaAccessToken, setMetaAccessToken] = useState('');
   const [metaVerifyToken, setMetaVerifyToken] = useState('oneai_meta_verify_secret_123');
   const [metaSaveSuccess, setMetaSaveSuccess] = useState(false);
+  const [phoneAlias, setPhoneAlias] = useState('+1 (555) 019-2834 (Prime Marketing Main Line)');
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const socketRef = useRef<Socket | null>(null);
