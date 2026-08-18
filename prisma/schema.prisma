@@ -530,6 +530,11 @@ model WhatsAppNumber {
   lastConnectedAt DateTime?
   phoneNumber     String? // Encrypted
   qualityRating   String? // green/yellow/red quality indicator
+  provider        String               @default("BAILEYS") // "BAILEYS" | "META_CLOUD_API"
+  metaPhoneNumberId String?
+  metaWabaId        String?
+  metaAccessToken   String?            @db.Text
+  metaVerifyToken   String?
 
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
