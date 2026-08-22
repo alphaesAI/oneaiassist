@@ -316,7 +316,7 @@ export async function runAIAgentAutoResponse(tenantId: string, conversationId: s
               content: dbMessage.content,
               direction: dbMessage.direction,
               senderType: dbMessage.senderType,
-              createdAt: dbMessage.createdAt,
+              createdAt: dbMessage.createdAt instanceof Date ? dbMessage.createdAt.toISOString() : dbMessage.createdAt,
             },
           });
         } catch (err) {
@@ -351,7 +351,7 @@ export async function runAIAgentAutoResponse(tenantId: string, conversationId: s
             content: dbMessage.content,
             direction: dbMessage.direction,
             senderType: dbMessage.senderType,
-            createdAt: dbMessage.createdAt,
+            createdAt: dbMessage.createdAt instanceof Date ? dbMessage.createdAt.toISOString() : dbMessage.createdAt,
           },
         });
       } catch (err) {
@@ -551,6 +551,34 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
       }
     });
 
+  // Handle message ACK / status updates (Sent -> Delivered -> Read)
+  sock.ev.on('messages.update', async (updates) => {
+    for (const update of updates) {
+      if (update.key?.id && update.update?.status != null) {
+        const msgId = update.key.id;
+        const statusVal = update.update.status;
+        let statusStr: 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' = 'SENT';
+        if (statusVal === 3 || statusVal === 4) statusStr = 'DELIVERED';
+        else if (statusVal === 5) statusStr = 'READ';
+        else if (statusVal === 0 || statusVal === 1) statusStr = 'FAILED';
+
+        try {
+          const db = getTenantPrisma(tenantId, 'ADMIN');
+          const updated = await db.message.updateMany({
+            where: { tenantId, channelMessageId: msgId },
+            data: { status: statusStr },
+          });
+          if (updated.count > 0) {
+            console.log(`[Engine] Message ${msgId} status updated to ${statusStr}`);
+            io.to(`tenant_${tenantId}`).emit('message_status', { channelMessageId: msgId, status: statusStr });
+          }
+        } catch (err) {
+          console.warn(`[Engine] Status update failed for ${msgId}:`, err);
+        }
+      }
+    }
+  });
+
   // Handle inbound messages
   sock.ev.on('messages.upsert', async (m) => {
     if (m.type !== 'notify') return;
@@ -563,29 +591,39 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
       const norm = WhatsAppNormalizer.normalizeBaileys(msg);
       if (!norm) continue;
 
-      const fromJid = norm.remoteJid;
-      if (!fromJid?.endsWith('@s.whatsapp.net')) continue;
+      const rawJid = norm.remoteJid || '';
+      const cleanPhone = rawJid.split('@')[0].split(':')[0].replace(/[^\d]/g, '');
+      if (!cleanPhone) continue;
 
-      const rawPhone = fromJid.split('@')[0];
+      const fromJid = `${cleanPhone}@s.whatsapp.net`;
+      const rawPhone = cleanPhone;
       const text = norm.text;
 
       if (!text && norm.messageType === 'TEXT') continue;
 
       console.log(`[Engine] Message event for tenant ${tenantId} (fromMe: ${norm.fromMe}) from/to ${rawPhone}: "${text}"`);
 
-      // Run RLS-compliant database operations inside transaction
+      // Run RLS-compliant database operations for inbound message
       try {
-        let conversationId = '';
-        let triggerAI = false;
-        let createdMessage: any = null;
+        let targetCustomer: any = null;
+        const normRawPhone = cleanPhone;
+        const targetJid = toJid(cleanPhone);
 
-        await db.$transaction(async (tx) => {
-          // 1. Identity Unification Check
-          const customers = await tx.customer.findMany({ where: { tenantId } });
-          let targetCustomer = null;
-          const normRawPhone = rawPhone.replace(/[^\d]/g, '');
-          const targetJid = toJid(rawPhone);
+        // 1. First lookup by CustomerChannel index
+        const existingChannel = await db.customerChannel.findFirst({
+          where: {
+            tenantId,
+            channel: 'WHATSAPP',
+            channelIdentifier: fromJid,
+          },
+          include: { customer: true },
+        });
 
+        if (existingChannel?.customer) {
+          targetCustomer = existingChannel.customer;
+        } else {
+          // Fallback: Check existing customers by phone match
+          const customers = await db.customer.findMany({ where: { tenantId } });
           for (const c of customers) {
             try {
               let decPhone = c.primaryPhone;
@@ -609,184 +647,134 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
                 targetCustomer = c;
                 break;
               }
-            } catch (e) {
-              // Ignore failures
-            }
-          }
-
-          // 2. Link or create Customer
-          if (!targetCustomer) {
-            targetCustomer = await tx.customer.create({
-              data: {
-                tenantId,
-                displayName: norm.pushName || rawPhone,
-                primaryPhone: encrypt(rawPhone),
-                otpVerified: false,
-                optedIn: true,
-              },
-            });
-
-            await tx.customerChannel.create({
-              data: {
-                tenantId,
-                customerId: targetCustomer.id,
-                channel: 'WHATSAPP',
-                channelIdentifier: fromJid,
-                channelMetadata: {},
-              },
-            });
-          }
-
-          // 3. Find or Create open Conversation
-          let conversation = await tx.conversation.findFirst({
-            where: {
-              customerId: targetCustomer.id,
-              channel: 'WHATSAPP',
-              status: 'OPEN',
-            },
-          });
-
-          if (!conversation) {
-            conversation = await tx.conversation.create({
-              data: {
-                tenantId,
-                customerId: targetCustomer.id,
-                channel: 'WHATSAPP',
-                status: 'OPEN',
-                lastMessageAt: new Date(),
-              },
-            });
-          } else {
-            await tx.conversation.update({
-              where: { id: conversation.id },
-              data: { lastMessageAt: new Date() },
-            });
-          }
-
-          conversationId = conversation.id;
-
-          // Check stop keyword configuration
-          const botConfig = await tx.botConfig.findUnique({
-            where: { tenantId }
-          });
-          const stopKeyword = botConfig?.stopKeyword || 'STOP';
-
-          let isStopMessage = false;
-          if (!norm.fromMe && text.trim().toUpperCase() === stopKeyword.toUpperCase()) {
-            isStopMessage = true;
-            conversation = await tx.conversation.update({
-              where: { id: conversation.id },
-              data: { automationEnabled: false }
-            });
-            console.log(`[Engine] STOP keyword detected. AI response disabled for conversation: ${conversation.id}`);
-          }
-
-          // 4. Save Message
-          const direction = norm.fromMe ? 'OUTBOUND' : 'INBOUND';
-          const senderType = norm.fromMe ? 'AGENT' : 'CUSTOMER';
-          const messageStatus = norm.fromMe ? 'SENT' : 'READ';
-
-          const message = await tx.message.create({
-            data: {
-              tenantId,
-              conversationId: conversation.id,
-              direction,
-              senderType,
-              content: text,
-              channel: 'WHATSAPP',
-              channelMessageId: norm.messageId,
-              messageType: norm.messageType === 'OTHER' ? 'OTHER' : norm.messageType,
-              status: messageStatus,
-              contextMessageId: norm.contextMessageId || null,
-            },
-          });
-          createdMessage = message;
-
-          // 5. Emit new_message event via Socket.io
-          io.to(`tenant_${tenantId}`).emit('new_message', {
-            conversationId: conversation.id,
-            message: {
-              id: message.id,
-              content: message.content,
-              direction: message.direction,
-              senderType: message.senderType,
-              createdAt: message.createdAt,
-              messageType: message.messageType,
-              status: message.status,
-            },
-          });
-
-          // If inbound message from customer, check if they received a recent broadcast and increment replied metric
-          if (!norm.fromMe && targetCustomer) {
-            const recentJob = await tx.broadcastJob.findFirst({
-              where: {
-                tenantId,
-                customerId: targetCustomer.id,
-              },
-              orderBy: { scheduledFor: 'desc' },
-            });
-
-            if (recentJob?.campaignId) {
-              const allJobs = await tx.broadcastJob.findMany({
-                where: { campaignId: recentJob.campaignId },
-                select: { customerId: true },
-              });
-              const cIds = allJobs.map((j) => j.customerId);
-
-              const repliedConversationsCount = await tx.conversation.count({
-                where: {
-                  tenantId,
-                  customerId: { in: cIds },
-                  messages: {
-                    some: {
-                      direction: 'INBOUND',
-                      createdAt: { gte: recentJob.scheduledFor },
-                    },
-                  },
-                },
-              });
-
-              await tx.broadcastCampaign.update({
-                where: { id: recentJob.campaignId },
-                data: { replied: Math.max(repliedConversationsCount, 1) },
-              });
-
-              io.to(`tenant_${tenantId}`).emit('broadcast_stats_updated', {
-                campaignId: recentJob.campaignId,
-                replied: Math.max(repliedConversationsCount, 1),
-              });
-            }
-          }
-
-          // Only trigger AI response if it's not fromMe, not a stop keyword, and automation is enabled on conversation
-          if (!norm.fromMe && !isStopMessage && conversation.automationEnabled) {
-            triggerAI = true;
-          }
-        }, { timeout: 20000 });
-
-        if (triggerAI) {
-          const config = await db.tenantAIConfig.findUnique({
-            where: { tenantId },
-          });
-
-          if (config?.isActive && conversationId) {
-            const msgId = createdMessage?.id || '';
-            const job = await db.inboundMessageJob.upsert({
-              where: { messageId: msgId },
-              create: { tenantId, conversationId, messageId: msgId, status: 'PENDING' },
-              update: {}, // noop — duplicate webhook delivery, original job retained
-            });
-            const isNew = job.createdAt >= new Date(Date.now() - 2000);
-            if (isNew) {
-              console.log(`[Engine] Enqueued inbound message job ${job.id} for conversation ${conversationId}`);
-            } else {
-              console.log(`[Engine] Duplicate messageId ${msgId} received — skipped re-enqueue`);
+            } catch {
+              // Ignore decryption error
             }
           }
         }
 
+        // 2. Create Customer if not found
+        if (!targetCustomer) {
+          targetCustomer = await db.customer.create({
+            data: {
+              tenantId,
+              displayName: norm.pushName || rawPhone,
+              primaryPhone: encrypt(rawPhone),
+              otpVerified: false,
+              optedIn: true,
+            },
+          });
+
+          await db.customerChannel.create({
+            data: {
+              tenantId,
+              customerId: targetCustomer.id,
+              channel: 'WHATSAPP',
+              channelIdentifier: fromJid,
+              channelMetadata: {},
+            },
+          }).catch(() => {}); // Ignore duplicate channel race conditions
+        }
+
+        // 3. Find or Create open Conversation
+        let conversation = await db.conversation.findFirst({
+          where: {
+            customerId: targetCustomer.id,
+            channel: 'WHATSAPP',
+            status: 'OPEN',
+          },
+        });
+
+        if (!conversation) {
+          conversation = await db.conversation.create({
+            data: {
+              tenantId,
+              customerId: targetCustomer.id,
+              channel: 'WHATSAPP',
+              status: 'OPEN',
+              lastMessageAt: new Date(),
+            },
+          });
+        } else {
+          await db.conversation.update({
+            where: { id: conversation.id },
+            data: { lastMessageAt: new Date() },
+          });
+        }
+
+        const conversationId = conversation.id;
+
+        // Check stop keyword configuration
+        const botConfig = await db.botConfig.findUnique({
+          where: { tenantId }
+        });
+        const stopKeyword = botConfig?.stopKeyword || 'STOP';
+
+        let isStopMessage = false;
+        if (!norm.fromMe && text.trim().toUpperCase() === stopKeyword.toUpperCase()) {
+          isStopMessage = true;
+          conversation = await db.conversation.update({
+            where: { id: conversation.id },
+            data: { automationEnabled: false }
+          });
+          console.log(`[Engine] STOP keyword detected. AI response disabled for conversation: ${conversation.id}`);
+        }
+
+        // 4. Save Message
+        const direction = norm.fromMe ? 'OUTBOUND' : 'INBOUND';
+        const senderType = norm.fromMe ? 'AGENT' : 'CUSTOMER';
+        const messageStatus = norm.fromMe ? 'SENT' : 'READ';
+
+        const message = await db.message.create({
+          data: {
+            tenantId,
+            conversationId: conversation.id,
+            direction,
+            senderType,
+            content: text,
+            channel: 'WHATSAPP',
+            channelMessageId: norm.messageId,
+            messageType: norm.messageType === 'OTHER' ? 'OTHER' : norm.messageType,
+            status: messageStatus,
+            contextMessageId: norm.contextMessageId || null,
+          },
+        });
+
+        console.log(`[Engine] Successfully saved inbound message ${message.id} for conversation ${conversation.id}`);
+
+        // 5. Emit new_message event via Socket.io
+        io.to(`tenant_${tenantId}`).emit('new_message', {
+          conversationId: conversation.id,
+          message: {
+            id: message.id,
+            content: message.content,
+            direction: message.direction,
+            senderType: message.senderType,
+            createdAt: message.createdAt instanceof Date ? message.createdAt.toISOString() : message.createdAt,
+            messageType: message.messageType,
+            status: message.status,
+          },
+        });
+
+        // 6. Trigger AI processing if enabled
+        if (!norm.fromMe && !isStopMessage && conversation.automationEnabled) {
+          const config = await db.tenantAIConfig.findUnique({
+            where: { tenantId },
+          });
+
+          if (config?.isActive) {
+            const msgId = message.id;
+            const job = await db.inboundMessageJob.upsert({
+              where: { messageId: msgId },
+              create: { tenantId, conversationId, messageId: msgId, status: 'PENDING' },
+              update: {},
+            });
+            console.log(`[Engine] Enqueued inbound message job ${job.id} for conversation ${conversationId}`);
+          }
+        }
+
       } catch (err) {
-        console.error(`[Engine] Database transaction failed for message event from/to ${rawPhone}:`, err);
+        console.error(`[Engine] Failed to process message event from/to ${rawPhone}:`, err);
       }
     }
   });

@@ -176,10 +176,10 @@ export async function POST(req: Request) {
     });
 
     // Write to audit logs safely (resolving a valid tenant user if userId is null)
-    let auditUserId = userId;
+    let auditUserId: string | undefined = userId;
     if (!auditUserId) {
       const tenantUser = await db.user.findFirst({ where: { tenantId } });
-      auditUserId = tenantUser?.id || null;
+      if (tenantUser) auditUserId = tenantUser.id;
     }
 
     if (auditUserId) {
@@ -221,10 +221,10 @@ export async function PATCH(req: Request) {
     });
 
     // Write audit log entry safely
-    let auditUserId = userId;
+    let auditUserId: string | undefined = userId;
     if (!auditUserId) {
       const tenantUser = await db.user.findFirst({ where: { tenantId } });
-      auditUserId = tenantUser?.id || null;
+      if (tenantUser) auditUserId = tenantUser.id;
     }
 
     if (auditUserId) {
