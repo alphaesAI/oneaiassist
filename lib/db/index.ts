@@ -11,14 +11,21 @@ if (!connectionString) {
   throw new Error('DATABASE_URL environment variable is not set.');
 }
 
+const poolConfig = {
+  connectionString,
+  max: 20,
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+};
+
 if (process.env.NODE_ENV === 'production') {
-  const pool = new Pool({ connectionString });
+  const pool = new Pool(poolConfig);
   const adapter = new PrismaPg(pool);
   prismaInstance = new PrismaClient({ adapter });
 } else {
   // Prevent multiple client/pool instances during hot reloading
   if (!globalForPrisma.pgPool) {
-    globalForPrisma.pgPool = new Pool({ connectionString });
+    globalForPrisma.pgPool = new Pool(poolConfig);
   }
   if (!globalForPrisma.prisma || !(globalForPrisma.prisma as any).marketingCampaign) {
     const adapter = new PrismaPg(globalForPrisma.pgPool);
@@ -31,7 +38,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 export const prisma = prismaInstance;
-export const pool = globalForPrisma.pgPool || new Pool({ connectionString });
+export const pool = globalForPrisma.pgPool || new Pool(poolConfig);
 
 /**
  * Returns a Prisma Client instance extended with Row-Level Security (RLS) policies.

@@ -10,15 +10,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'conversationId is required' }, { status: 400 });
     }
 
-    // 1. Resolve Tenant ID by fetching conversation (bypass RLS via transaction config)
-    const conversation = await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(
-        `SELECT set_config('app.current_user_role', 'PLATFORM_OWNER', true);`
-      );
-      return tx.conversation.findUnique({
-        where: { id: conversationId },
-      });
-    });
+    // 1. Resolve Tenant ID by fetching conversation (via direct query without interactive transaction)
+    const conversations = await prisma.$queryRaw<Array<{ id: string; tenantId: string }>>`
+      SELECT id, "tenantId" FROM "Conversation" WHERE id = ${conversationId} LIMIT 1;
+    `;
+    const conversation = conversations[0];
 
     if (!conversation) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });

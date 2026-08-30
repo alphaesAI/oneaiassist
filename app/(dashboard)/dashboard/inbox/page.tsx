@@ -37,6 +37,9 @@ interface Message {
   direction: 'INBOUND' | 'OUTBOUND';
   senderType: 'CUSTOMER' | 'BOT' | 'AGENT';
   createdAt: string;
+  status?: string;
+  channelMessageId?: string;
+  contextMessageId?: string;
 }
 
 interface Template {
@@ -199,12 +202,18 @@ export default function InboxPage() {
     socketInstance.on('new_message', (data: { conversationId: string; message: Message }) => {
       console.log('[Socket] New message event received:', data);
 
-      if (data.conversationId === selectedConvId) {
-        queryClient.setQueryData<Message[]>(['messages', selectedConvId], (old = []) => {
-          if (old.some((m) => m.id === data.message.id)) return old;
-          return [...old, data.message];
-        });
-      }
+      const normalizedMsg: Message = {
+        ...data.message,
+        createdAt:
+          typeof data.message.createdAt === 'string'
+            ? data.message.createdAt
+            : new Date(data.message.createdAt).toISOString(),
+      };
+
+      queryClient.setQueryData<Message[]>(['messages', data.conversationId], (old = []) => {
+        if (old.some((m) => m.id === normalizedMsg.id)) return old;
+        return [...old, normalizedMsg];
+      });
 
       queryClient.invalidateQueries({ queryKey: ['conversations', tenantId] });
     });

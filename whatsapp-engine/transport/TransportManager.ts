@@ -6,15 +6,25 @@ import { getTenantPrisma } from '../../lib/db/index';
 import { jidNormalizedUser } from '@whiskeysockets/baileys';
 
 export function toJid(to: string): string {
-  if (to.includes('@')) return to;
-  let digits = to.replace(/[^\d]/g, '');
-  // Auto-prefix 10-digit Indian mobile numbers (starting with 6,7,8,9) with country code '91'
-  if (digits.length === 10 && /^[6-9]/.test(digits)) {
-    digits = `91${digits}`;
-  } else if (digits.length === 10) {
-    digits = `1${digits}`;
+  if (to.includes('@s.whatsapp.net') || to.includes('@g.us') || to.includes('@lid')) {
+    if (to.includes('@s.whatsapp.net')) {
+      const cleanNum = to.split('@')[0].split(':')[0].replace(/[^\d]/g, '');
+      if (cleanNum.length >= 15) {
+        return jidNormalizedUser(`${cleanNum}@lid`);
+      }
+    }
+    return jidNormalizedUser(to);
   }
-  return `${digits}@s.whatsapp.net`;
+  let cleanNum = to.split('@')[0].split(':')[0].replace(/[^\d]/g, '');
+  if (cleanNum.length >= 15) {
+    return jidNormalizedUser(`${cleanNum}@lid`);
+  }
+  if (cleanNum.length === 10 && /^[6-9]/.test(cleanNum)) {
+    cleanNum = `91${cleanNum}`;
+  } else if (cleanNum.length === 10) {
+    cleanNum = `1${cleanNum}`;
+  }
+  return jidNormalizedUser(`${cleanNum}@s.whatsapp.net`);
 }
 
 export class BaileysTransportAdapter implements IMessageTransport {
@@ -23,13 +33,19 @@ export class BaileysTransportAdapter implements IMessageTransport {
   private get sock() {
     const s = sessions.get(this.tenantId);
     if (!s) throw new Error('WhatsApp session is not active for this tenant.');
+    const ws = (s.ws as any);
+    if (ws && ws.readyState !== undefined && ws.readyState !== 1) {
+      throw new Error('WhatsApp connection is currently reconnecting or offline.');
+    }
     return s;
   }
 
   async sendText(to: string, text: string): Promise<SendResult> {
     const jid = toJid(to);
+    console.log(`[BaileysTransport] Sending outbound text to ${jid} (tenant: ${this.tenantId})`);
     const sent = await this.sock.sendMessage(jid, { text });
-    return { messageId: sent?.key.id ?? '' };
+    console.log(`[BaileysTransport] Baileys sendMessage result messageId: ${sent?.key?.id}`);
+    return { messageId: sent?.key?.id ?? '' };
   }
 
   async sendImage(to: string, opts: { filePath: string; caption?: string }): Promise<SendResult> {

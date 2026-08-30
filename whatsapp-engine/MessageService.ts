@@ -74,20 +74,52 @@ export class MessageService {
       }
     }
 
-    // 3. Decrypt recipient if encrypted
+    // 3. Decrypt recipient if encrypted, or resolve CustomerChannel channelIdentifier
     let targetPhone = params.to;
-    if (params.to && (params.to.includes(':') || params.to.length > 25)) {
+
+    if (targetPhone && !targetPhone.includes('@') && (targetPhone.includes(':') || targetPhone.length > 25)) {
       try {
-        targetPhone = decrypt(params.to);
+        targetPhone = decrypt(targetPhone);
       } catch (err) {
-        console.warn(`[MessageService] Phone string decryption warning for ${params.to}:`, err);
+        console.warn(`[MessageService] Phone string decryption warning for ${targetPhone}:`, err);
+      }
+    }
+
+    if (params.conversationId) {
+      try {
+        const channel = await db.customerChannel.findFirst({
+          where: {
+            tenantId,
+            channel: 'WHATSAPP',
+            customer: { conversations: { some: { id: params.conversationId } } },
+          },
+          include: { customer: true },
+        });
+
+        if (channel?.customer?.primaryPhone) {
+          let dec = channel.customer.primaryPhone;
+          if (dec.includes(':') || dec.length > 25) {
+            try { dec = decrypt(dec); } catch {}
+          }
+          const clean = dec.replace(/[^\d]/g, '');
+          if (clean.length >= 10 && clean.length <= 14) {
+            targetPhone = dec;
+          }
+        }
+
+        const cleanTarget = targetPhone ? targetPhone.split('@')[0].replace(/[^\d]/g, '') : '';
+        if ((!cleanTarget || cleanTarget.length > 14 || cleanTarget.length < 10) && channel?.channelIdentifier) {
+          targetPhone = channel.channelIdentifier;
+        }
+      } catch (err) {
+        console.warn(`[MessageService] CustomerChannel lookup fallback for ${params.conversationId}:`, err);
       }
     }
 
     // 4. Determine transport message type and execute
     const transport = TransportManager.getTransport(tenantId);
     let result: { messageId: string } = { messageId: '' };
-    let messageType: 'TEXT' | 'IMAGE' | 'VIDEO' = 'TEXT';
+    let messageType: 'TEXT' | 'IMAGE' | 'VIDEO' | 'OTHER' = 'TEXT';
     let sendStatus: 'SENT' | 'FAILED' = 'SENT';
 
     try {
@@ -160,7 +192,7 @@ export class MessageService {
         content: dbMessage.content,
         direction: dbMessage.direction,
         senderType: dbMessage.senderType,
-        createdAt: dbMessage.createdAt,
+        createdAt: dbMessage.createdAt.toISOString(),
         messageType: dbMessage.messageType,
         status: dbMessage.status,
       },
