@@ -4,7 +4,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import qrcode from 'qrcode';
-import { getTenantPrisma } from '../lib/db/index';
+import { getTenantPrisma, prisma } from '../lib/db/index';
 import { decrypt } from '../lib/encryption';
 import { connectTenant, sessions, qrCodes, pairingCodes, startInboundJobWorker } from './engine-logic';
 import { connectTenantOpenWA, openwaSessions, openwaQrCodes } from './openwa-logic';
@@ -186,9 +186,29 @@ app.post('/api/whatsapp/send', async (req, res) => {
     }
 
     // Ensure an active session exists (Baileys or OpenWA)
-    const hasSession = sessions.has(tenantId) || openwaSessions.has(tenantId);
+    let hasSession = sessions.has(tenantId) || openwaSessions.has(tenantId);
     if (!hasSession) {
-      return res.status(400).json({ error: 'WhatsApp session is not active for this tenant.' });
+      try {
+        const db = getTenantPrisma(tenantId, 'ADMIN');
+        const sessionRecord = await db.whatsAppNumber.findUnique({ where: { tenantId } });
+        if (sessionRecord?.status === 'CONNECTED') {
+          console.log(`[Engine] Auto-connecting tenant ${tenantId} session for outbound send...`);
+          connectTenant(tenantId, io);
+          for (let i = 0; i < 15; i++) {
+            await new Promise((r) => setTimeout(r, 200));
+            if (sessions.has(tenantId) || openwaSessions.has(tenantId)) {
+              hasSession = true;
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[Engine] Auto-connect attempt failed for tenant ${tenantId}:`, e);
+      }
+    }
+
+    if (!hasSession) {
+      return res.status(400).json({ error: 'WhatsApp session is not active for this tenant. Please connect WhatsApp from Settings.' });
     }
 
     const result = await MessageService.sendMessage(tenantId, {
@@ -285,9 +305,25 @@ app.post('/api/whatsapp/emit', async (req, res) => {
 
 // Boot Server on port 3001
 const PORT = 3001;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`=========================================`);
   console.log(`WhatsApp Engine running on port ${PORT}`);
   console.log(`=========================================`);
   startInboundJobWorker(io);
+
+  // Restore active connected sessions on startup
+  try {
+    const activeSessions = await prisma.whatsAppNumber.findMany({
+      where: { status: 'CONNECTED' },
+    });
+    console.log(`[Engine] Found ${activeSessions.length} active sessions to restore on startup.`);
+    for (const session of activeSessions) {
+      if (session.tenantId) {
+        console.log(`[Engine] Restoring connection for tenant ${session.tenantId}`);
+        connectTenant(session.tenantId, io);
+      }
+    }
+  } catch (err) {
+    console.warn('[Engine] Startup session restore warning:', err);
+  }
 });

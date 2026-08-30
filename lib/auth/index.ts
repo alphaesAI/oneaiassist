@@ -76,13 +76,8 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const user = await prisma.$transaction(async (tx) => {
-          await tx.$executeRawUnsafe(
-            `SELECT set_config('app.current_user_role', 'PLATFORM_OWNER', true);`
-          );
-          return tx.user.findUnique({
-            where: { email: credentials.email },
-          });
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
         });
 
         if (!user) {
