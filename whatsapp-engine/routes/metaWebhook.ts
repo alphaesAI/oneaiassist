@@ -5,6 +5,7 @@ import { decrypt, encrypt } from '../../lib/encryption';
 import { MetaNormalizer, normalizeMetaPhone } from '../MetaNormalizer';
 import { handleMessageStatusUpdate } from '../engine-logic';
 import { toJid } from '../transport/TransportManager';
+import { enqueueInboundJob } from '../agents/IngressService';
 
 export function createMetaWebhookRouter(io: any) {
   const router = Router();
@@ -74,9 +75,23 @@ export function createMetaWebhookRouter(io: any) {
 
           const tenantId = number.tenantId;
           const db = getTenantPrisma(tenantId, 'ADMIN');
-          const rawPhone = msg.contactNumber;
-          const normRawPhone = rawPhone.replace(/[^\d]/g, '');
+          const rawPhone = '+' + msg.contactNumber;
+          const normRawPhone = msg.contactNumber;
           const targetJid = toJid(rawPhone);
+
+          // 0. ATOMIC IDEMPOTENCY GATE: Enqueue InboundMessageJob before anything else
+          const enqueueRes = await enqueueInboundJob({
+            tenantId,
+            wamId: msg.messageId,
+            senderPhone: rawPhone,
+            recipientId: msg.phoneNumberId,
+            payload: msg,
+          });
+
+          if (!enqueueRes.accepted) {
+            console.log(`[Meta Webhook] Duplicate wamId ${msg.messageId} rejected atomically at database level.`);
+            continue;
+          }
 
           let createdMessage: any = null;
           let conversationId = '';
@@ -196,17 +211,17 @@ export function createMetaWebhookRouter(io: any) {
             });
           });
 
-          // 6. Queue InboundMessageJob for OpenClaw turn-by-turn AI qualification
-          if (createdMessage && conversationId) {
-            await db.inboundMessageJob.create({
+          // 6. Link created message and conversation to the enqueued InboundMessageJob
+          if (enqueueRes.jobId && createdMessage && conversationId) {
+            await db.inboundMessageJob.update({
+              where: { id: enqueueRes.jobId },
               data: {
-                tenantId,
                 conversationId,
                 messageId: createdMessage.id,
-                status: 'PENDING',
+                status: 'QUEUED',
               },
             });
-            console.log(`[Meta Webhook] Enqueued InboundMessageJob for message ${createdMessage.id}`);
+            console.log(`[Meta Webhook] Enqueued InboundMessageJob ${enqueueRes.jobId} for message ${createdMessage.id}`);
           }
         } catch (msgErr) {
           console.error(`[Meta Webhook] Error processing message ${msg.messageId}:`, msgErr);

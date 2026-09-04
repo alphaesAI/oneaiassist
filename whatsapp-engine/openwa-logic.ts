@@ -4,6 +4,7 @@ import { getTenantPrisma } from '../lib/db/index';
 import { encrypt } from '../lib/encryption';
 import { runAIAgentAutoResponse, connectTenant, handleMessageStatusUpdate } from './engine-logic';
 import { WhatsAppNormalizer } from './WhatsAppNormalizer';
+import { enqueueInboundJob } from './agents/IngressService';
 
 export const openwaSessions = new Map<string, any>();
 export const openwaQrCodes = new Map<string, string>();
@@ -208,15 +209,25 @@ export async function connectTenantOpenWA(tenantId: string, io: any) {
         if (!isStopRequest && conversation.automationEnabled !== false) {
           try {
             const db = getTenantPrisma(tenantId, 'ADMIN');
-            await db.inboundMessageJob.create({
-              data: {
-                tenantId,
-                conversationId: conversation.id,
-                messageId: newMsg.id,
-                status: 'PENDING',
-              },
+            const wamId = canonical.messageId || newMsg.id;
+            const enqueueRes = await enqueueInboundJob({
+              tenantId,
+              wamId,
+              senderPhone: rawPhone,
+              payload: { text, from: rawPhone },
             });
-            console.log(`[OpenWA Engine] Enqueued inbound message job for conversation ${conversation.id}`);
+
+            if (enqueueRes.accepted && enqueueRes.jobId) {
+              await db.inboundMessageJob.update({
+                where: { id: enqueueRes.jobId },
+                data: {
+                  conversationId: conversation.id,
+                  messageId: newMsg.id,
+                  status: 'QUEUED',
+                },
+              });
+              console.log(`[OpenWA Engine] Enqueued inbound message job ${enqueueRes.jobId} for conversation ${conversation.id}`);
+            }
           } catch (err) {
             console.error(`[OpenWA Engine] AI response enqueue error for tenant ${tenantId}:`, err);
           }

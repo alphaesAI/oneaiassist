@@ -200,7 +200,11 @@ export async function getTenantAIClient(tenantId: string, bypassTrialCheck: bool
         const promptLower = userPrompt.toLowerCase();
         
         let responseText = "Hello! I am your OneAI Assist agent. To recommend the best insurance plans, could you please tell me your age?";
-        if (promptLower.includes('data extraction bot') || promptLower.includes('extract insurance qualification fields')) {
+        if (promptLower.includes('allowed policy candidates') || promptLower.includes('recommend the top matching insurance policies')) {
+          responseText = `🎉 Based on your profile, here are your top 2 matched insurance plans:\n\n1️⃣ *Apex Bronze Essential Plan* (Best Value - Apex Health Corp)\n• Monthly Premium: $100 - $150 / mo\n• Max Sum Insured: $250,000\n• Highlights: Basic in-network coverage with low deductible.\n\n2️⃣ *Apex Gold Premium Care* (Comprehensive - Apex Health Corp)\n• Monthly Premium: $180 - $250 / mo\n• Max Sum Insured: $750,000\n• Highlights: Comprehensive zero-deductible coverage with specialist access.\n\nWhich option would you like to explore?`;
+        } else if (promptLower.includes('policy clauses')) {
+          responseText = `According to your plan schedule, in-network preventive and hospital services are covered with a standard co-pay. Emergency hospital care is covered 100% after deductible.`;
+        } else if (promptLower.includes('data extraction bot') || promptLower.includes('extract insurance qualification fields')) {
           responseText = '{"age":35,"state":"TX","healthConditions":["None"],"budgetMin":100,"budgetMax":200,"familySize":1}';
         } else if (promptLower.includes('budget') || promptLower.includes('$') || (promptLower.includes('age') && promptLower.includes('state'))) {
           responseText = "Excellent. I have captured your details. I'm checking our catalog to rank the best insurance options for you...\n[[INTAKE_DATA:{\"age\":35,\"state\":\"TX\",\"healthConditions\":[\"None\"],\"budgetMin\":100,\"budgetMax\":200,\"familySize\":1}]]";
