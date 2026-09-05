@@ -256,7 +256,6 @@ Cite the relevant section/page number if available. If the answer is not in the 
               data: {
                 needsEscalation: true,
                 escalationReason: reason,
-                automationEnabled: false,
               },
             });
           }

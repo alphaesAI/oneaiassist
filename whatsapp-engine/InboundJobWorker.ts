@@ -224,7 +224,7 @@ export class InboundJobWorker {
         where: { id: conversationId },
       });
 
-      if (activeConv && (activeConv.automationEnabled === false || activeConv.needsEscalation)) {
+      if (activeConv && activeConv.automationEnabled === false) {
         console.log(`[InboundJobWorker] Conversation ${conversationId} has automation disabled / human takeover. Skipping automated bot response.`);
         await db.inboundMessageJob.update({
           where: { id: job.id },
