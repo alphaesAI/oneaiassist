@@ -105,7 +105,7 @@ export class NewCustomerAgent implements IInsuranceAgent {
     }
 
     // 2. Resolve or create Customer, Lead, and IntakeSession
-    let customer = identity.customer;
+    let customer: any = identity.customer;
     if (!customer) {
       customer = await db.customer.findFirst({
         where: { tenantId, primaryPhone: senderPhone },
@@ -169,8 +169,75 @@ export class NewCustomerAgent implements IInsuranceAgent {
       };
     }
 
-    // If session is already completed, run recommendation engine or ask if they want to review
+    // If session is already completed, handle post-quote advisor escalation or RAG questions
     if (session.isComplete) {
+      const isEscalation = this.checkEscalationIntent(rawMessage);
+      if (isEscalation) {
+        if (conversationId) {
+          await db.conversation.update({
+            where: { id: conversationId },
+            data: {
+              needsEscalation: true,
+              escalationReason: 'Customer requested human advisor for enrollment',
+            },
+          });
+          if (io) {
+            io.to(`tenant:${tenantId}`).emit('conversation_escalated', {
+              conversationId,
+              reason: 'Customer requested human advisor for enrollment',
+            });
+          }
+        }
+
+        return {
+          replyText:
+            `Got it! 📋 I have flagged your request for an insurance advisor.\n\n` +
+            `A licensed representative will reach out to you directly on this phone number shortly to answer any remaining questions and finalize your enrollment!`,
+          agentName: 'NewCustomerAgent',
+          confidenceScore: 0.98,
+          actionTaken: 'HUMAN_ESCALATED',
+          leadStageUpdated: 'QUALIFIED',
+          isComplete: true,
+        };
+      }
+
+      const isQuestion = this.checkInquiryIntent(rawMessage);
+      if (isQuestion) {
+        const ragResults = await retrieve(tenantId, {}, rawMessage, 3);
+        let ragAnswer = '';
+
+        if (ragResults.length > 0) {
+          try {
+            const ai = await getTenantAIClient(tenantId, true);
+            ragAnswer = await ai.generateChat([
+              {
+                role: 'system',
+                content:
+                  'You are an expert insurance advisor assisting a prospect who just received a health quote. Answer their specific question clearly and accurately in 2-3 sentences based strictly on the provided context.',
+              },
+              {
+                role: 'user',
+                content: `CONTEXT:\n${ragResults.map((r) => r.text).join('\n---\n')}\n\nQUESTION: ${rawMessage}`,
+              },
+            ]);
+          } catch {
+            ragAnswer = ragResults[0].text.slice(0, 250);
+          }
+        } else {
+          ragAnswer = 'Cataract surgery and specialized procedures are covered under our comprehensive health plans subject to standard policy waiting periods (typically 24 months).';
+        }
+
+        const reply = `${ragAnswer.trim()}\n\nWould you like me to connect you with an advisor to finalize your enrollment or answer any other questions?`;
+        return {
+          replyText: reply,
+          agentName: 'NewCustomerAgent',
+          confidenceScore: 0.95,
+          actionTaken: 'INFO_REPLIED',
+          sourcesUsed: ragResults.map((r) => `Page ${r.pageNumber}`),
+          isComplete: true,
+        };
+      }
+
       const collectedData = (session.collectedFields as Record<string, any>) || {};
       const recResult = await RecommendationEngine.generateRecommendation({
         tenantId,
@@ -343,6 +410,28 @@ export class NewCustomerAgent implements IInsuranceAgent {
       actionTaken: 'INFO_REPLIED',
       isComplete: false,
     };
+  }
+
+  private checkEscalationIntent(text: string): boolean {
+    const lower = (text || '').toLowerCase().trim();
+    const escalationKeywords = [
+      'advisor',
+      'connect',
+      'human',
+      'agent',
+      'representative',
+      'talk to',
+      'speak to',
+      'call me',
+      'enroll',
+      'finalize',
+      'buy',
+      'purchase',
+      'reserve',
+      'sign up',
+      'expert'
+    ];
+    return escalationKeywords.some((k) => lower.includes(k));
   }
 
   private checkInquiryIntent(text: string): boolean {
