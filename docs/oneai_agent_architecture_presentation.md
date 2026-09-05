@@ -22,6 +22,8 @@ OneAI Assist decouples conversational intelligence into two specialized autonomo
 
 ## 🏗️ 1. High-Level System Architecture
 
+![OneAI Assist Dual-Agent Architecture](oneai_architecture.jpg)
+
 ```mermaid
 graph TD
     subgraph ChannelIngress ["1. Omnichannel Ingress Layer"]
