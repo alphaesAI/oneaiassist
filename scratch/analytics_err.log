@@ -1,8 +1,11 @@
-PrismaClientKnownRequestError: 
-Invalid `prisma.lead.count()` invocation:
-
-
-Transaction API error: Unable to start a transaction in the given time.
-    at zr.handleRequestError (D:\codebase\oneaiassist_v1\node_modules\@prisma\client\runtime\client.js:65:8286)
-    at zr.handleAndLogRequestError (D:\codebase\oneaiassist_v1\node_modules\@prisma\client\runtime\client.js:65:7581)
-    at zr.request (D:\codebase\oneaiassist_v1\node_modules\@prisma\client\runtime\client.js:65:7288)
+Error: Dynamic server usage: Route /api/analytics couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at V (D:\codebase\oneaiassist_v1\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:21778)
+    at Object.get (D:\codebase\oneaiassist_v1\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29465)
+    at l (D:\codebase\oneaiassist_v1\.next\server\app\api\analytics\route.js:1:2101)
+    at async D:\codebase\oneaiassist_v1\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:38411
+    at async e_.execute (D:\codebase\oneaiassist_v1\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:27880)
+    at async e_.handle (D:\codebase\oneaiassist_v1\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:39943)
+    at async exportAppRoute (D:\codebase\oneaiassist_v1\node_modules\next\dist\export\routes\app-route.js:77:26)
+    at async exportPageImpl (D:\codebase\oneaiassist_v1\node_modules\next\dist\export\worker.js:175:20)
+    at async Span.traceAsyncFn (D:\codebase\oneaiassist_v1\node_modules\next\dist\trace\trace.js:154:20)
+    at async Object.exportPage (D:\codebase\oneaiassist_v1\node_modules\next\dist\export\worker.js:237:20)

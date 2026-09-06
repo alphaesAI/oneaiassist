@@ -108,6 +108,7 @@ export async function POST(req: Request) {
       where: { id: conversationId, tenantId },
       data: {
         needsEscalation: !!needsEscalation,
+        automationEnabled: !needsEscalation,
         assignedAgentId: needsEscalation ? userId : null,
       },
     });

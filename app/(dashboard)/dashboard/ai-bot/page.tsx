@@ -71,113 +71,117 @@ export default function AiBotPage() {
     }
   }, []);
 
-  // Intake Questions Flowchart State
-  const [questions, setQuestions] = useState<Question[]>([
-    {
-      id: 'q1',
-      title: 'Welcome & Intent',
-      text: 'Hello! Are you looking for individual health insurance or a family gold plan today?',
-      type: 'multiple-choice',
-      required: true,
-      options: ['Individual Coverage', 'Family Gold Plan', 'Senior Medicare Supplement'],
-    },
-    {
-      id: 'q2',
-      title: 'Licensed Agent Check',
-      text: 'Would you like to speak directly with a licensed insurance advisor or browse coverage options first?',
-      type: 'multiple-choice',
-      required: true,
-      options: ['Speak with Licensed Advisor', 'Browse Options First'],
-    },
-    {
-      id: 'q3',
-      title: 'Monthly Budget',
-      text: 'What is your target monthly budget for health insurance coverage?',
-      type: 'number',
-      required: true,
-      options: [],
-    },
-    {
-      id: 'q4',
-      title: 'Contact Email',
-      text: 'Please enter your best email address so one of our advisors can send over policy quotes.',
-      type: 'email',
-      required: true,
-      options: [],
-    },
-  ]);
+  interface DynamicQuestionItem {
+    id: string;
+    stepOrder: number;
+    fieldKey: string;
+    questionPrompt: string;
+    validationType: 'NUMBER' | 'US_STATE' | 'CURRENCY' | 'ENUM' | 'PHONE' | 'EMAIL' | 'DATE' | 'TEXT';
+    isMandatory: boolean;
+    isSkippable: boolean;
+    options?: any;
+    isActive: boolean;
+  }
 
-  const [selectedQuestionId, setSelectedQuestionId] = useState<string>('q1');
+  const [dynamicQuestions, setDynamicQuestions] = useState<DynamicQuestionItem[]>([]);
+  const [selectedQuestionId, setSelectedQuestionId] = useState<string>('');
   const [showSimulator, setShowSimulator] = useState(false);
-
   const [isSavingIntake, setIsSavingIntake] = useState(false);
   const [intakeSavedSuccess, setIntakeSavedSuccess] = useState(false);
 
   useEffect(() => {
-    async function loadIntakeFlow() {
+    async function loadDynamicQuestions() {
       try {
-        const res = await fetch('/api/bot-config/intake');
+        const res = await fetch('/api/admin/intake-questions');
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data.questions) && data.questions.length > 0) {
-            setQuestions(data.questions);
+            setDynamicQuestions(data.questions);
             setSelectedQuestionId(data.questions[0].id);
           }
         }
       } catch (err) {
-        console.warn('Failed to load intake flow:', err);
+        console.warn('Failed to load dynamic intake questions:', err);
       }
     }
-    loadIntakeFlow();
+    loadDynamicQuestions();
   }, []);
 
   const saveIntakeFlow = async () => {
     setIsSavingIntake(true);
     try {
-      const res = await fetch('/api/bot-config/intake', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questions }),
-      });
-      if (res.ok) {
-        setIntakeSavedSuccess(true);
-        setTimeout(() => setIntakeSavedSuccess(false), 3000);
+      const selected = dynamicQuestions.find((q) => q.id === selectedQuestionId);
+      if (selected) {
+        await fetch('/api/admin/intake-questions', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selected),
+        });
       }
+      setIntakeSavedSuccess(true);
+      setTimeout(() => setIntakeSavedSuccess(false), 3000);
     } catch (err) {
-      console.error('Failed to save intake flow:', err);
+      console.error('Failed to save dynamic intake question:', err);
     } finally {
       setIsSavingIntake(false);
     }
   };
 
-  const selectedQuestion = questions.find((q) => q.id === selectedQuestionId) || questions[0];
+  const selectedDynamicQ =
+    dynamicQuestions.find((q) => q.id === selectedQuestionId) || dynamicQuestions[0] || {
+      id: '',
+      stepOrder: 1,
+      fieldKey: 'age',
+      questionPrompt: '',
+      validationType: 'NUMBER',
+      isMandatory: true,
+      isSkippable: false,
+      isActive: true,
+      options: null,
+    };
 
-  const updateSelectedQuestion = (field: keyof Question, value: any) => {
-    setQuestions((prev) =>
+  const updateSelectedDynamicQ = (field: keyof DynamicQuestionItem, value: any) => {
+    setDynamicQuestions((prev) =>
       prev.map((q) => (q.id === selectedQuestionId ? { ...q, [field]: value } : q))
     );
   };
 
-  const addQuestionNode = () => {
-    const newId = `q${questions.length + 1}`;
-    const newQ: Question = {
-      id: newId,
-      title: `Step ${questions.length + 1}: Custom Intake Node`,
-      text: 'Please enter your answer below:',
-      type: 'text',
-      required: true,
-      options: [],
-    };
-    setQuestions([...questions, newQ]);
-    setSelectedQuestionId(newId);
+  const addQuestionNode = async () => {
+    try {
+      const newStep = dynamicQuestions.length + 1;
+      const res = await fetch('/api/admin/intake-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fieldKey: `custom_field_${newStep}`,
+          questionPrompt: `Please enter your details for step ${newStep}:`,
+          validationType: 'TEXT',
+          stepOrder: newStep,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.question) {
+          setDynamicQuestions([...dynamicQuestions, data.question]);
+          setSelectedQuestionId(data.question.id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to add dynamic question:', err);
+    }
   };
 
-  const deleteQuestionNode = (id: string) => {
-    if (questions.length <= 1) return;
-    const filtered = questions.filter((q) => q.id !== id);
-    setQuestions(filtered);
-    if (selectedQuestionId === id) {
-      setSelectedQuestionId(filtered[0].id);
+  const deleteQuestionNode = async (id: string) => {
+    if (dynamicQuestions.length <= 1) return;
+    try {
+      await fetch(`/api/admin/intake-questions?id=${id}`, { method: 'DELETE' });
+      const filtered = dynamicQuestions.filter((q) => q.id !== id);
+      setDynamicQuestions(filtered);
+      if (selectedQuestionId === id) {
+        setSelectedQuestionId(filtered[0]?.id || '');
+      }
+    } catch (err) {
+      console.error('Failed to delete question:', err);
     }
   };
 
@@ -293,11 +297,11 @@ export default function AiBotPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Flowchart Nodes List (2 cols) */}
             <div className="lg:col-span-2 space-y-4">
-              {questions.map((q, idx) => {
+              {dynamicQuestions.map((q, idx) => {
                 const isSelected = q.id === selectedQuestionId;
                 return (
                   <div
-                    key={q.id}
+                    key={q.id || idx}
                     onClick={() => setSelectedQuestionId(q.id)}
                     className={`p-5 rounded-2xl border transition cursor-pointer ${
                       isSelected
@@ -308,16 +312,19 @@ export default function AiBotPage() {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-6 h-6 bg-[#004ac6] text-white text-xs font-bold rounded-full flex items-center justify-center">
-                          {idx + 1}
+                          {q.stepOrder || idx + 1}
                         </span>
-                        <h4 className="text-xs font-bold text-[#1c1b1f]">{q.title}</h4>
+                        <h4 className="text-xs font-bold text-[#1c1b1f]">{q.fieldKey}</h4>
+                        {q.isMandatory && (
+                          <span className="text-[10px] text-rose-500 font-bold">*Required</span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2">
                         <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-extrabold uppercase rounded-full">
-                          {q.type}
+                          {q.validationType}
                         </span>
-                        {questions.length > 1 && (
+                        {dynamicQuestions.length > 1 && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -333,12 +340,12 @@ export default function AiBotPage() {
                     </div>
 
                     <p className="text-xs text-gray-600 bg-white p-3 rounded-xl border border-slate-200">
-                      "{q.text}"
+                      "{q.questionPrompt}"
                     </p>
 
-                    {q.options && q.options.length > 0 && (
+                    {q.options && (
                       <div className="flex flex-wrap gap-1.5 mt-3">
-                        {q.options.map((opt) => (
+                        {(Array.isArray(q.options) ? q.options : [String(q.options)]).map((opt: string) => (
                           <span key={opt} className="px-2.5 py-1 bg-white border border-blue-200 text-[#004ac6] text-[10px] font-bold rounded-lg">
                             • {opt}
                           </span>
@@ -354,16 +361,16 @@ export default function AiBotPage() {
             <div className="bg-white border border-[#c3c6d7] rounded-2xl p-6 shadow-sm space-y-5 h-fit">
               <h4 className="text-sm font-bold text-[#1B4B91] flex items-center gap-2 border-b border-gray-100 pb-3">
                 <Sliders className="w-4 h-4 text-[#004ac6]" />
-                Node Properties Editor ({selectedQuestion.id})
+                Intake Step Editor ({selectedDynamicQ.fieldKey})
               </h4>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Step Title</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Field Key (Unique DB Identifier)</label>
                   <input
                     type="text"
-                    value={selectedQuestion.title}
-                    onChange={(e) => updateSelectedQuestion('title', e.target.value)}
+                    value={selectedDynamicQ.fieldKey}
+                    onChange={(e) => updateSelectedDynamicQ('fieldKey', e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs outline-none focus:bg-white focus:border-[#004ac6]"
                   />
                 </div>
@@ -372,26 +379,51 @@ export default function AiBotPage() {
                   <label className="block text-xs font-bold text-gray-700 mb-1">Question Prompt (WhatsApp Copy)</label>
                   <textarea
                     rows={3}
-                    value={selectedQuestion.text}
-                    onChange={(e) => updateSelectedQuestion('text', e.target.value)}
+                    value={selectedDynamicQ.questionPrompt}
+                    onChange={(e) => updateSelectedDynamicQ('questionPrompt', e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs outline-none focus:bg-white focus:border-[#004ac6]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Response Type</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Validation Type</label>
                   <select
-                    value={selectedQuestion.type}
-                    onChange={(e) => updateSelectedQuestion('type', e.target.value)}
+                    value={selectedDynamicQ.validationType}
+                    onChange={(e) => updateSelectedDynamicQ('validationType', e.target.value as any)}
                     className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs outline-none focus:bg-white focus:border-[#004ac6]"
                   >
-                    <option value="text">Free Text Response</option>
-                    <option value="multiple-choice">Multiple Choice Buttons</option>
-                    <option value="number">Currency / Number</option>
-                    <option value="email">Email Address</option>
-                    <option value="date">Date Picker</option>
+                    <option value="NUMBER">Number (Age, Family Size)</option>
+                    <option value="US_STATE">US State (50 States & Postal Codes)</option>
+                    <option value="CURRENCY">Currency (Monthly Budget, Dollar Ceiling)</option>
+                    <option value="ENUM">Enum / Multiple Choice Options</option>
+                    <option value="PHONE">Phone Number</option>
+                    <option value="EMAIL">Email Address</option>
+                    <option value="DATE">Date Picker</option>
+                    <option value="TEXT">Free Text</option>
                   </select>
                 </div>
+
+                {selectedDynamicQ.validationType === 'ENUM' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Options (comma separated)</label>
+                    <input
+                      type="text"
+                      value={
+                        Array.isArray(selectedDynamicQ.options)
+                          ? selectedDynamicQ.options.join(', ')
+                          : String(selectedDynamicQ.options || '')
+                      }
+                      onChange={(e) =>
+                        updateSelectedDynamicQ(
+                          'options',
+                          e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
+                        )
+                      }
+                      placeholder="e.g. None, Diabetes, Hypertension, Other"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs outline-none focus:bg-white focus:border-[#004ac6]"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -10,6 +10,7 @@ import { connectTenant, sessions, qrCodes, pairingCodes, startInboundJobWorker }
 import { connectTenantOpenWA, openwaSessions, openwaQrCodes } from './openwa-logic';
 import { MessageService } from './MessageService';
 import { TransportManager } from './transport/TransportManager';
+import { enqueueInboundJob } from './agents/IngressService';
 
 const app = express();
 app.use(cors());
@@ -46,6 +47,10 @@ io.on('connection', (socket) => {
     console.log('[Socket] Client disconnected');
   });
 });
+
+// Import & Mount Meta Cloud API Webhook router
+import { createMetaWebhookRouter } from './routes/metaWebhook';
+app.use(createMetaWebhookRouter(io));
 
 // REST API: Initiate Connection & return QR Code / Pairing Code
 app.post('/api/whatsapp/connect', async (req, res) => {
@@ -270,15 +275,24 @@ app.post('/api/whatsapp/webchat/inbound', async (req, res) => {
     });
 
     if (config?.isActive) {
-      await db.inboundMessageJob.create({
-        data: {
-          tenantId,
-          conversationId,
-          messageId,
-          status: 'PENDING',
-        },
+      const enqueueRes = await enqueueInboundJob({
+        tenantId,
+        wamId: messageId,
+        senderPhone: conversation.customer?.primaryPhone || 'webchat_user',
+        payload: { text, from: 'webchat_user' },
       });
-      console.log(`[Webchat] Enqueued inbound message job for conversation ${conversationId}`);
+
+      if (enqueueRes.accepted && enqueueRes.jobId) {
+        await db.inboundMessageJob.update({
+          where: { id: enqueueRes.jobId },
+          data: {
+            conversationId,
+            messageId,
+            status: 'QUEUED',
+          },
+        });
+        console.log(`[Webchat] Enqueued inbound message job ${enqueueRes.jobId} for conversation ${conversationId}`);
+      }
     }
 
     return res.json({ success: true });

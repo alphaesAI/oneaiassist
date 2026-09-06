@@ -170,6 +170,7 @@ model Tenant {
   platformConnections  PlatformConnection[]
   intakeSessions       IntakeSession[]
   inboundMessageJobs   InboundMessageJob[]
+  dynamicIntakeQuestions DynamicIntakeQuestion[]
 }
 
 model BotConfig {
@@ -241,10 +242,13 @@ model Customer {
   optedOutAt     DateTime?
   consentIp      String?
   consentTimestamp DateTime?
+  primaryCustomerId String? // Optional parent customer for dependent phone resolution
   createdAt      DateTime  @default(now())
 
   // Relations
   tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  primaryCustomer  Customer?         @relation("CustomerDependents", fields: [primaryCustomerId], references: [id], onDelete: SetNull)
+  dependents       Customer[]        @relation("CustomerDependents")
   customerChannels CustomerChannel[]
   conversations    Conversation[]
   leads            Lead[]
@@ -530,6 +534,11 @@ model WhatsAppNumber {
   lastConnectedAt DateTime?
   phoneNumber     String? // Encrypted
   qualityRating   String? // green/yellow/red quality indicator
+  provider        String               @default("BAILEYS") // "BAILEYS" | "META_CLOUD_API"
+  metaPhoneNumberId String?
+  metaWabaId        String?
+  metaAccessToken   String?            @db.Text
+  metaVerifyToken   String?
 
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -775,17 +784,20 @@ enum IntakeSessionStatus {
 }
 
 model IntakeSession {
-  id              String              @id @default(cuid())
-  tenantId        String
-  leadId          String              @unique
-  customerId      String
-  flowId          String
-  flowVersion     String
-  status          IntakeSessionStatus @default(IN_PROGRESS)
-  collectedFields Json
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  completedAt     DateTime?
+  id                String              @id @default(cuid())
+  tenantId          String
+  leadId            String              @unique
+  customerId        String
+  flowId            String
+  flowVersion       String
+  status            IntakeSessionStatus @default(IN_PROGRESS)
+  currentFieldKey   String?             // Active question fieldKey being asked
+  interruptionCount Int                 @default(0)
+  isComplete        Boolean             @default(false)
+  collectedFields   Json
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  completedAt       DateTime?
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -797,6 +809,8 @@ model IntakeSession {
 }
 
 enum InboundJobStatus {
+  RECEIVED
+  QUEUED
   PENDING
   PROCESSING
   COMPLETED
@@ -806,17 +820,58 @@ enum InboundJobStatus {
 model InboundMessageJob {
   id             String           @id @default(cuid())
   tenantId       String
-  conversationId String
-  messageId      String           @unique
-  status         InboundJobStatus @default(PENDING)
+  wamId          String?          // Meta WhatsApp Message ID (for atomic idempotency)
+  senderPhone    String?          // Normalized E.164 phone
+  recipientId    String?          // WhatsApp Business Account Phone ID
+  payload        Json?            // Raw webhook payload
+  conversationId String?
+  messageId      String?          @unique
+  status         InboundJobStatus @default(RECEIVED)
   attempts       Int              @default(0)
+  maxAttempts    Int              @default(3)
   lastError      String?
+  lockedAt       DateTime?        // Row lock timestamp for stale lock resolution
   createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @default(now()) @updatedAt
   processedAt    DateTime?
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, wamId])     // DB-level unique constraint for atomic deduplication
   @@index([tenantId])
   @@index([status, createdAt])
 }
+
+enum ValidationType {
+  NUMBER
+  US_STATE
+  CURRENCY
+  ENUM
+  PHONE
+  EMAIL
+  DATE
+  TEXT
+}
+
+model DynamicIntakeQuestion {
+  id              String         @id @default(cuid())
+  tenantId        String
+  stepOrder       Int
+  fieldKey        String         // "age", "state", "budget", "family_size", "conditions"
+  questionPrompt  String         @db.Text
+  validationType  ValidationType @default(TEXT)
+  isMandatory     Boolean        @default(true)
+  isSkippable     Boolean        @default(false)
+  options         Json?          // Array of quick-reply choices for WhatsApp buttons
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, stepOrder])
+  @@unique([tenantId, fieldKey])
+  @@index([tenantId, isActive])
+}
+
 

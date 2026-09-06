@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "biome:check": "biome check .",
+    "biome:format": "biome format --write .",
     "test:typecheck": "tsc --noEmit",
     "test:e2e": "npx tsx scripts/test_portal_checkout_e2e.ts",
     "test:tdd": "npx tsx tdd/run-all-tests.ts",
@@ -44,6 +46,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.9",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
@@ -59,6 +62,7 @@
     "postcss": "^8",
     "prisma": "^7.8.0",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   },
   "prisma": {

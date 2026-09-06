@@ -9,6 +9,8 @@ import { Boom } from '@hapi/boom';
 import { WhatsAppNormalizer } from './WhatsAppNormalizer';
 import { IntakeQualificationSkill } from '../lib/claw/IntakeQualificationSkill';
 import { toJid } from './transport/TransportManager';
+import { enqueueInboundJob } from './agents/IngressService';
+import { InboundJobWorker } from './InboundJobWorker';
 
 export const sessions = new Map<string, any>();
 export const qrCodes = new Map<string, string>();
@@ -763,13 +765,25 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
           });
 
           if (config?.isActive) {
-            const msgId = message.id;
-            const job = await db.inboundMessageJob.upsert({
-              where: { messageId: msgId },
-              create: { tenantId, conversationId, messageId: msgId, status: 'PENDING' },
-              update: {},
+            const wamId = msg.key?.id || message.id;
+            const enqueueRes = await enqueueInboundJob({
+              tenantId,
+              wamId,
+              senderPhone: rawPhone,
+              payload: { text: norm.text, from: rawPhone },
             });
-            console.log(`[Engine] Enqueued inbound message job ${job.id} for conversation ${conversationId}`);
+
+            if (enqueueRes.accepted && enqueueRes.jobId) {
+              await db.inboundMessageJob.update({
+                where: { id: enqueueRes.jobId },
+                data: {
+                  conversationId: conversation.id,
+                  messageId: message.id,
+                  status: 'QUEUED',
+                },
+              });
+              console.log(`[Engine] Enqueued inbound message job ${enqueueRes.jobId} for conversation ${conversationId}`);
+            }
           }
         }
 
@@ -817,51 +831,7 @@ export async function connectTenant(tenantId: string, io: any, phoneNumber?: str
   }
 }
 
-let workerActive = false;
-
 export function startInboundJobWorker(io: any) {
-  if (workerActive) return;
-  workerActive = true;
-  console.log('[Inbound Worker] Starting database-backed queue poll loop...');
-
-  setInterval(async () => {
-    try {
-      const job = await prisma.inboundMessageJob.findFirst({
-        where: { status: 'PENDING' },
-        orderBy: { createdAt: 'asc' },
-      });
-
-      if (!job) return;
-
-      await prisma.inboundMessageJob.update({
-        where: { id: job.id },
-        data: { status: 'PROCESSING' },
-      });
-
-      console.log(`[Inbound Worker] Processing job ${job.id} for conversation ${job.conversationId}...`);
-      
-      try {
-        await runAIAgentAutoResponse(job.tenantId, job.conversationId, io);
-        
-        await prisma.inboundMessageJob.update({
-          where: { id: job.id },
-          data: { status: 'COMPLETED', processedAt: new Date() },
-        });
-      } catch (err: any) {
-        console.error(`[Inbound Worker] Job ${job.id} failed:`, err);
-        const attempts = job.attempts + 1;
-        await prisma.inboundMessageJob.update({
-          where: { id: job.id },
-          data: {
-            status: attempts >= 3 ? 'FAILED' : 'PENDING',
-            attempts,
-            lastError: err?.message || String(err),
-          },
-        });
-      }
-    } catch (err) {
-      console.error('[Inbound Worker] Poller encountered error:', err);
-    }
-  }, 2000);
+  InboundJobWorker.start(io);
 }
 

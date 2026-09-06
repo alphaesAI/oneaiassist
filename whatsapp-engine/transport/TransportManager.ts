@@ -1,6 +1,7 @@
 import { IMessageTransport, SendResult } from './IMessageTransport';
 import { sessions, qrCodes } from '../engine-logic';
 import { openwaSessions, openwaQrCodes } from '../openwa-logic';
+import { MetaCloudTransportAdapter } from './MetaCloudTransportAdapter';
 import { getTenantPrisma } from '../../lib/db/index';
 import { jidNormalizedUser } from '@whiskeysockets/baileys';
 
@@ -156,6 +157,24 @@ export class OpenWATransportAdapter implements IMessageTransport {
 
 export class TransportManager {
   private static instances = new Map<string, IMessageTransport>();
+
+  static async getTransportAsync(tenantId: string): Promise<IMessageTransport> {
+    let transport = this.instances.get(tenantId);
+    if (!transport) {
+      const db = getTenantPrisma(tenantId, 'ADMIN');
+      const number = await db.whatsAppNumber.findUnique({ where: { tenantId } });
+
+      if (number?.provider === 'META_CLOUD_API') {
+        transport = new MetaCloudTransportAdapter(tenantId);
+      } else if (process.env.WA_ENGINE === 'OPENWA' || openwaSessions.has(tenantId)) {
+        transport = new OpenWATransportAdapter(tenantId);
+      } else {
+        transport = new BaileysTransportAdapter(tenantId);
+      }
+      this.instances.set(tenantId, transport);
+    }
+    return transport;
+  }
 
   static getTransport(tenantId: string): IMessageTransport {
     let transport = this.instances.get(tenantId);
