@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 
 interface NavItem {
   name: string;
@@ -156,16 +157,23 @@ export default function DashboardSidebar() {
                         key={item.name}
                         href={item.href}
                         className={cn(
-                          'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+                          'relative flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
                           isActive
-                            ? 'bg-[#2563EB] text-white font-semibold shadow-sm'
+                            ? 'text-white font-semibold shadow-sm'
                             : 'text-[#E2E8F0] hover:text-white hover:bg-white/[0.08]'
                         )}
                       >
-                        <span className="material-symbols-outlined text-[20px] shrink-0">
+                        {isActive && (
+                          <motion.div
+                            layoutId="activeSidebarTab"
+                            className="absolute inset-0 bg-[#2563EB] rounded-lg -z-0"
+                            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                          />
+                        )}
+                        <span className="material-symbols-outlined text-[20px] shrink-0 z-10">
                           {item.icon}
                         </span>
-                        <span>{item.name}</span>
+                        <span className="z-10">{item.name}</span>
                       </Link>
                     );
                   })}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { X } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface OnboardingStatus {
   accountCreated: boolean;
