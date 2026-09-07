@@ -6,6 +6,7 @@ import { useTenantInfo } from '@/hooks/useTenantInfo';
 import { io } from 'socket.io-client';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Conversation {
   id: string;
@@ -547,10 +548,18 @@ export default function InboxPage() {
                   Loading message logs...
                 </div>
               ) : (
-                messages?.map((msg) => {
-                  const isOutbound = msg.direction === 'OUTBOUND';
-                  return (
-                    <div key={msg.id} className="flex flex-col">
+                <AnimatePresence initial={false}>
+                  {messages?.map((msg) => {
+                    const isOutbound = msg.direction === 'OUTBOUND';
+                    return (
+                      <motion.div
+                        key={msg.id}
+                        initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex flex-col"
+                      >
                       <div
                         className={cn(
                           'flex flex-col max-w-[70%] rounded-2xl p-4 text-xs leading-relaxed shadow-sm border',
@@ -603,9 +612,10 @@ export default function InboxPage() {
                           )}
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   );
-                })
+                })}
+              </AnimatePresence>
               )}
               <div ref={messageEndRef} />
             </div>
