@@ -52,6 +52,10 @@ io.on('connection', (socket) => {
 import { createMetaWebhookRouter } from './routes/metaWebhook';
 app.use(createMetaWebhookRouter(io));
 
+// Import & Mount iMessage Cloud API Webhook router
+import { createIMessageWebhookRouter } from './routes/imessageWebhook';
+app.use(createIMessageWebhookRouter(io));
+
 // REST API: Initiate Connection & return QR Code / Pairing Code
 app.post('/api/whatsapp/connect', async (req, res) => {
   try {

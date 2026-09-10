@@ -27,6 +27,8 @@ enum Channel {
   INSTAGRAM
   FACEBOOK
   WEBCHAT
+  IMESSAGE
+  SMS
 }
 
 enum ConversationStatus {

@@ -405,13 +405,21 @@ export default function InboxPage() {
                       : 'hover:bg-slate-50/50 border-transparent text-[#49454f]'
                   )}
                 >
-                  {/* Status Badge in corner */}
+                  {/* Status Badges in corner */}
                   <div className="absolute top-4 right-4 flex items-center gap-1.5">
                     <span className={cn(
-                      "px-1.5 py-0.5 text-[9px] rounded font-bold uppercase tracking-wider",
+                      "px-1.5 py-0.5 text-[9px] rounded font-bold uppercase tracking-wider border",
+                      (conv as any).channel === 'IMESSAGE'
+                        ? "bg-sky-100 text-sky-800 border-sky-200"
+                        : "bg-emerald-100 text-emerald-800 border-emerald-200"
+                    )}>
+                      {(conv as any).channel === 'IMESSAGE' ? 'iMessage' : 'WhatsApp'}
+                    </span>
+                    <span className={cn(
+                      "px-1.5 py-0.5 text-[9px] rounded font-bold uppercase tracking-wider border",
                       conv.needsEscalation 
-                        ? "bg-amber-100 text-amber-800 border border-amber-200" 
-                        : "bg-blue-100 text-blue-800 border border-blue-200"
+                        ? "bg-amber-100 text-amber-800 border-amber-200" 
+                        : "bg-blue-100 text-blue-800 border-blue-200"
                     )}>
                       {conv.needsEscalation ? 'Agent' : 'AI'}
                     </span>
