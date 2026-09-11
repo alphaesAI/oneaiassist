@@ -3,6 +3,8 @@ import { getTenantPrisma, prisma } from '@/lib/db';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/admin/system-health
  * Returns real-time health metrics, queue status, and compliance alert stats for the tenant.

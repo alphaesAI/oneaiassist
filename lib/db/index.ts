@@ -1,6 +1,17 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import dns from 'dns';
+
+// Ensure IPv4 is prioritized for database host resolution to prevent IPv6 ENETUNREACH/ETIMEDOUT on dual-stack environments
+const origLookup = dns.lookup;
+dns.lookup = function (hostname: any, options: any, callback: any) {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+  return origLookup(hostname, { ...options, family: 4 }, callback);
+};
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient; pgPool: Pool };
 

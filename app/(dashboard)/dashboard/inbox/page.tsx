@@ -56,7 +56,7 @@ export default function InboxPage() {
 
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
-  const [activeTab, setActiveTab] = useState<'ALL' | 'UNREAD' | 'AI' | 'ESCALATED' | 'PENDING' | 'CLOSED'>('ALL');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'UNREAD' | 'AI' | 'ESCALATED' | 'INSTAGRAM' | 'PENDING' | 'CLOSED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false);
   const [isIntakeExpanded, setIsIntakeExpanded] = useState(true);
@@ -316,6 +316,7 @@ export default function InboxPage() {
     }
     if (activeTab === 'AI') return !conv.needsEscalation;
     if (activeTab === 'ESCALATED') return conv.needsEscalation;
+    if (activeTab === 'INSTAGRAM') return (conv as any).channel === 'INSTAGRAM';
     if (activeTab === 'PENDING') return conv.status === 'PENDING';
 
     return true;
@@ -353,7 +354,7 @@ export default function InboxPage() {
 
         {/* Tab Selection */}
         <div className="flex px-2 border-b border-[#c3c6d7]/60 overflow-x-auto shrink-0 scrollbar-none">
-          {(['ALL', 'UNREAD', 'AI', 'ESCALATED', 'PENDING', 'CLOSED'] as const).map((tab) => (
+          {(['ALL', 'UNREAD', 'AI', 'ESCALATED', 'INSTAGRAM', 'PENDING', 'CLOSED'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -411,9 +412,11 @@ export default function InboxPage() {
                       "px-1.5 py-0.5 text-[9px] rounded font-bold uppercase tracking-wider border",
                       (conv as any).channel === 'IMESSAGE'
                         ? "bg-sky-100 text-sky-800 border-sky-200"
+                        : (conv as any).channel === 'INSTAGRAM'
+                        ? "bg-gradient-to-r from-purple-100 to-rose-100 text-purple-900 border-purple-200"
                         : "bg-emerald-100 text-emerald-800 border-emerald-200"
                     )}>
-                      {(conv as any).channel === 'IMESSAGE' ? 'iMessage' : 'WhatsApp'}
+                      {(conv as any).channel === 'IMESSAGE' ? 'iMessage' : (conv as any).channel === 'INSTAGRAM' ? 'Instagram' : 'WhatsApp'}
                     </span>
                     <span className={cn(
                       "px-1.5 py-0.5 text-[9px] rounded font-bold uppercase tracking-wider border",

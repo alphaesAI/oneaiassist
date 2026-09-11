@@ -56,6 +56,10 @@ app.use(createMetaWebhookRouter(io));
 import { createIMessageWebhookRouter } from './routes/imessageWebhook';
 app.use(createIMessageWebhookRouter(io));
 
+// Import & Mount Meta Instagram Webhook router
+import { createInstagramWebhookRouter } from './routes/instagramWebhook';
+app.use(createInstagramWebhookRouter(io));
+
 // REST API: Initiate Connection & return QR Code / Pairing Code
 app.post('/api/whatsapp/connect', async (req, res) => {
   try {
