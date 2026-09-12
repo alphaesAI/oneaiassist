@@ -14,25 +14,22 @@ function generateSecret32(): string {
   return secret;
 }
 
+import { AuthValidator } from '@/lib/auth/validation';
+
 export async function POST(req: Request) {
   try {
-    const { tenantName, tenantSlug, email, password } = await req.json();
+    const rawBody = await req.json();
 
-    if (!tenantName || !tenantSlug || !email || !password) {
+    // 1. Strict Server-Side Validation
+    const validation = AuthValidator.validateRegistration(rawBody);
+    if (!validation.isValid || !validation.data) {
       return NextResponse.json(
-        { error: 'All fields are required.' },
+        { error: validation.error || 'Invalid registration details provided.' },
         { status: 400 }
       );
     }
 
-    const slug = tenantSlug.toLowerCase().trim().replace(/[^a-z0-9-]/g, '');
-
-    if (!slug) {
-      return NextResponse.json(
-        { error: 'Invalid tenant slug.' },
-        { status: 400 }
-      );
-    }
+    const { tenantName, tenantSlug: slug, email, password } = validation.data;
 
     // Check if tenant slug is already taken
     const existingTenant = await prisma.tenant.findUnique({
@@ -41,7 +38,7 @@ export async function POST(req: Request) {
 
     if (existingTenant) {
       return NextResponse.json(
-        { error: 'Tenant slug is already in use.' },
+        { error: 'Registration could not be completed with the provided organization details.' },
         { status: 400 }
       );
     }
@@ -57,14 +54,15 @@ export async function POST(req: Request) {
     });
 
     if (existingUser) {
+      // Generic error response to prevent user account enumeration
       return NextResponse.json(
-        { error: 'User email is already registered.' },
+        { error: 'Registration could not be completed with the provided organization details.' },
         { status: 400 }
       );
     }
 
-    // Hash the password securely using bcryptjs
-    const hashedPassword = await hash(password, 10);
+    // 3. Cryptographic Password Hashing (OWASP 12 rounds)
+    const hashedPassword = await hash(password, 12);
     const totpSecret = generateSecret32();
 
     // Create the Tenant and their first User (ADMIN) in a transaction.
@@ -105,9 +103,10 @@ export async function POST(req: Request) {
       totpSecret, // Return secret so the user can register it in Google Authenticator
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown database error';
+    // 4. Generic error response - do not leak internal database messages
+    console.error('[Registration] Unhandled error during tenant registration:', err);
     return NextResponse.json(
-      { error: `Registration failed: ${message}` },
+      { error: 'An unexpected error occurred while setting up your account. Please try again later.' },
       { status: 500 }
     );
   }

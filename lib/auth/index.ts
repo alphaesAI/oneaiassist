@@ -60,6 +60,12 @@ export function verifyTOTP(secret: string, code: string): boolean {
   return false;
 }
 
+import { AuthValidator } from './validation';
+import { LoginRateLimiter } from './rateLimiter';
+
+// Precomputed 12-round dummy bcrypt hash for timing attack mitigation
+const DUMMY_HASH = '$2a$12$e8m4Jp4e0c3Q8m3kYh4P5uJ8v1uXw2e3r4t5y6u7i8o9p0a1b2c3d';
+
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
@@ -72,26 +78,43 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        // 1. Strict Server-Side Validation
+        const validation = AuthValidator.validateLogin(credentials?.email, credentials?.password);
+        if (!validation.isValid || !validation.data) {
           return null;
+        }
+
+        const { email, password } = validation.data;
+
+        // 2. Rate Limiting Protection (Max 5 attempts / 15 minutes)
+        const rateLimit = LoginRateLimiter.check(email);
+        if (!rateLimit.isAllowed) {
+          throw new Error(`Too many failed login attempts. Account temporarily locked. Please try again in ${rateLimit.retryAfterMinutes || 15} minutes.`);
         }
 
         const db = getTenantPrisma('GLOBAL', 'PLATFORM_OWNER');
         const user = await db.user.findUnique({
-          where: { email: credentials.email },
+          where: { email },
         });
 
+        // 4. Generic Errors & Constant-Time Dummy Comparison (Defeats Account Enumeration & Timing Attacks)
         if (!user) {
+          // Execute dummy comparison to ensure response latency is identical to real account lookups
+          await compare(password, DUMMY_HASH);
+          LoginRateLimiter.recordFailure(email);
           return null;
         }
 
-        // Secure password verification using bcryptjs
-        const isPasswordValid = await compare(credentials.password, user.hashedPassword);
+        // 3. Cryptographic Password Verification
+        const isPasswordValid = await compare(password, user.hashedPassword);
         if (!isPasswordValid) {
+          LoginRateLimiter.recordFailure(email);
           return null;
         }
 
-        // Password is valid; now handle optional 2FA
+        // Success: Reset rate limiter for this email
+        LoginRateLimiter.reset(email);
+
         // Optional 2FA – if user has it enabled, verify when a code is supplied
         if (user.twoFactorEnabled) {
           const secret = user.totpSecret || 'JBSWY3DPEHPK3PXP'; // fallback secret
@@ -103,6 +126,7 @@ export const authOptions: NextAuthOptions = {
             console.log('2FA not provided or invalid – proceeding without it (optional)');
           }
         }
+
         // Return the authenticated user mapped to NextAuth.User type
         return {
           id: user.id,

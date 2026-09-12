@@ -18,23 +18,25 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Execute sign in via NextAuth
         const result = await signIn('credentials', {
           redirect: false,
           email,
           password,
         });
-        console.log('signIn result:', result);
 
-      if (result?.error) {
-      setError('Invalid email or password.');
-    } else {
-        router.push('/dashboard');
-        router.refresh();
-      }
-    } catch {
-      setError('An unexpected error occurred. Please try again.');
-    } finally {
+        if (result?.error) {
+          if (result.error.includes('Too many failed login attempts')) {
+            setError(result.error);
+          } else {
+            setError('Invalid email or password.');
+          }
+        } else {
+          router.push('/dashboard');
+          router.refresh();
+        }
+      } catch {
+        setError('An unexpected error occurred. Please try again.');
+      } finally {
       setLoading(false);
     }
   };
