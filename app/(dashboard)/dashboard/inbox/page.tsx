@@ -688,6 +688,8 @@ export default function InboxPage() {
           </div>
         </section>
       )}
+      </div>
     </div>
   );
 }
+

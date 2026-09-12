@@ -39,8 +39,7 @@ async function runGate44() {
     throw new Error('Expected at least 3 active dynamic questions');
   }
 
-  console.log('
-? Gate 4.4: System Health & Observability Metrics Passed Perfectly!');
+  console.log('✅ Gate 4.4: System Health & Observability Metrics Passed Perfectly!');
 }
 
 runGate44().catch((err) => {
