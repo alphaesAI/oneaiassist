@@ -7,6 +7,9 @@ import { io } from 'socket.io-client';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
+import WhatsAppChatView from '@/components/chat/WhatsAppChatView';
+import IMessageChatView from '@/components/chat/IMessageChatView';
+import InstagramChatView from '@/components/chat/InstagramChatView';
 
 interface Conversation {
   id: string;
@@ -56,6 +59,7 @@ export default function InboxPage() {
   const tenantId = info?.tenantId;
 
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
+  const [selectedChannel, setSelectedChannel] = useState<'ALL' | 'WHATSAPP' | 'IMESSAGE' | 'INSTAGRAM'>('ALL');
   const [replyText, setReplyText] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'UNREAD' | 'AI' | 'ESCALATED' | 'IMESSAGE' | 'INSTAGRAM' | 'PENDING' | 'CLOSED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -299,6 +303,12 @@ export default function InboxPage() {
 
   // Client-Side Tab & Search Filtering
   const filteredConversations = conversations?.filter((conv) => {
+    // 0. Channel Selection Filter
+    if (selectedChannel !== 'ALL') {
+      const convChan = ((conv as any).channel || 'WHATSAPP').toUpperCase();
+      if (convChan !== selectedChannel) return false;
+    }
+
     // 1. Search Query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -329,17 +339,85 @@ export default function InboxPage() {
   const showWarningBanner = !isSessionClosed && sessionWindow!.msRemaining < 6 * 60 * 60 * 1000;
 
   return (
-    <div className="h-[calc(100vh-140px)] border border-[#c3c6d7] bg-white rounded-2xl overflow-hidden flex font-sans text-[#1c1b1f] shadow-sm">
-      {/* COLUMN 2: Conversation List */}
-      <section className="w-[340px] flex flex-col border-r border-[#c3c6d7] bg-white shrink-0">
-        {/* Search */}
-        <div className="p-4 border-b border-[#c3c6d7]/60 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[#1c1b1f]">Inbox</h2>
-            <span className="text-[10px] bg-slate-100 text-[#49454f] font-bold px-2 py-0.5 rounded-full border border-[#c3c6d7]/50">
-              {conversations?.length || 0} chats
-            </span>
-          </div>
+    <div className="flex flex-col h-[calc(100vh-140px)] gap-3 font-sans text-[#1c1b1f]">
+      {/* TOP CHANNEL HUB SELECTOR BAR */}
+      <div className="flex items-center justify-between bg-white border border-[#c3c6d7] rounded-xl px-4 py-2.5 shadow-sm shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-[#737686] mr-2">
+            Channel:
+          </span>
+          <button
+            onClick={() => setSelectedChannel('ALL')}
+            className={cn(
+              'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5',
+              selectedChannel === 'ALL'
+                ? 'bg-[#1c1b1f] text-white shadow-sm'
+                : 'bg-slate-100 text-[#49454f] hover:bg-slate-200'
+            )}
+          >
+            <span className="material-symbols-outlined text-[15px]">all_inbox</span>
+            All Channels
+          </button>
+          <button
+            onClick={() => setSelectedChannel('WHATSAPP')}
+            className={cn(
+              'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border',
+              selectedChannel === 'WHATSAPP'
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+            )}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            WhatsApp
+          </button>
+          <button
+            onClick={() => setSelectedChannel('IMESSAGE')}
+            className={cn(
+              'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border',
+              selectedChannel === 'IMESSAGE'
+                ? 'bg-[#007AFF] text-white border-[#007AFF] shadow-sm'
+                : 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100'
+            )}
+          >
+            <span className="w-2 h-2 rounded-full bg-[#007AFF]" />
+            Apple iMessage
+          </button>
+          <button
+            onClick={() => setSelectedChannel('INSTAGRAM')}
+            className={cn(
+              'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border',
+              selectedChannel === 'INSTAGRAM'
+                ? 'bg-gradient-to-r from-[#833ab4] to-[#fd1d1d] text-white border-transparent shadow-sm'
+                : 'bg-gradient-to-r from-purple-50 to-rose-50 text-purple-900 border-purple-200 hover:brightness-95'
+            )}
+          >
+            <span className="w-2 h-2 rounded-full bg-rose-500" />
+            Instagram Direct
+          </button>
+        </div>
+
+        <div className="text-[11px] text-[#737686] font-medium hidden sm:block">
+          Active Interface: <strong className="text-[#1c1b1f]">
+            {selectedConv 
+              ? ((selectedConv as any).channel || 'WHATSAPP') 
+              : selectedChannel === 'ALL' ? 'Native Auto-Detect' : selectedChannel}
+          </strong>
+        </div>
+      </div>
+
+      <div className="flex-1 border border-[#c3c6d7] bg-white rounded-2xl overflow-hidden flex shadow-sm min-h-0">
+        {/* COLUMN 2: Conversation List */}
+        <section className="w-[340px] flex flex-col border-r border-[#c3c6d7] bg-white shrink-0">
+          {/* Search */}
+          <div className="p-4 border-b border-[#c3c6d7]/60 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-[#1c1b1f]">
+                {selectedChannel === 'ALL' ? 'Unified Inbox' : `${selectedChannel.charAt(0) + selectedChannel.slice(1).toLowerCase()} Inbox`}
+              </h2>
+              <span className="text-[10px] bg-slate-100 text-[#49454f] font-bold px-2 py-0.5 rounded-full border border-[#c3c6d7]/50">
+                {filteredConversations?.length || 0} chats
+              </span>
+            </div>
           <div className="relative">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#737686] text-[18px]">
               search
@@ -479,277 +557,33 @@ export default function InboxPage() {
       </section>
 
       {/* COLUMN 3: Chat Thread */}
-      <section className="flex-1 flex flex-col bg-slate-50/10 min-w-0">
-        {selectedConvId ? (
-          <>
-            {/* Thread Header */}
-            <header className="h-16 flex items-center justify-between px-6 border-b border-[#c3c6d7] bg-white sticky top-0 z-10 shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-[#004ac6]/10 text-[#004ac6] flex items-center justify-center font-bold text-xs shrink-0">
-                  {selectedConv?.customer.displayName.substring(0, 2).toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-xs text-[#1c1b1f] leading-none truncate">
-                    {selectedConv?.customer.displayName}
-                  </h3>
-                  <span className="text-[10px] text-[#737686] mt-1 block">
-                    +{selectedConv?.customer.phone}
-                  </span>
-                </div>
-              </div>
+      <section className="flex-1 flex flex-col bg-slate-50/10 min-w-0 overflow-hidden">
+        {selectedConvId && selectedConv ? (
+          (() => {
+            const chan = ((selectedConv as any).channel || 'WHATSAPP').toUpperCase();
 
-              {/* AI/Agent Handling Toggle Switch & Close Summary */}
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => closeConversationMutation.mutate()}
-                  disabled={closeConversationMutation.isPending || selectedConv?.status === 'CLOSED'}
-                  className="px-3 py-1.5 rounded-lg text-[9px] font-bold bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-50 flex items-center gap-1 transition-all shadow-sm"
-                  title="Close conversation and generate AI summary note"
-                >
-                  <span className="material-symbols-outlined text-[13px]">summarize</span>
-                  <span>{closeConversationMutation.isPending ? 'Summarizing...' : selectedConv?.status === 'CLOSED' ? 'Closed' : 'Close & AI Summary'}</span>
-                </button>
-                <div className="flex items-center gap-2 bg-slate-50 border border-[#c3c6d7] p-1 rounded-lg">
-                  <button
-                    onClick={() => {
-                      if (selectedConv?.needsEscalation) toggleHandlerMutation.mutate(false);
-                    }}
-                    className={cn(
-                      "px-3 py-1 rounded text-[9px] font-bold transition-all",
-                      !selectedConv?.needsEscalation
-                        ? "bg-[#004ac6] text-white shadow-sm"
-                        : "text-[#49454f] hover:text-[#1c1b1f]"
-                    )}
-                  >
-                    AI Handling
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!selectedConv?.needsEscalation) toggleHandlerMutation.mutate(true);
-                    }}
-                    className={cn(
-                      "px-3 py-1 rounded text-[9px] font-bold transition-all",
-                      selectedConv?.needsEscalation
-                        ? "bg-amber-500 text-white shadow-sm"
-                        : "text-[#49454f] hover:text-[#1c1b1f]"
-                    )}
-                  >
-                    Agent Takeover
-                  </button>
-                </div>
-              </div>
-            </header>
+            // Native Props common to all 3 channel chat views
+            const commonProps = {
+              conversationId: selectedConv.id,
+              customerName: selectedConv.customer.displayName,
+              customerPhone: selectedConv.customer.phone,
+              messages: (messages || []) as any,
+              replyText,
+              setReplyText,
+              onSend: handleSend,
+              isSending: sendReplyMutation.isPending,
+              needsEscalation: selectedConv.needsEscalation,
+            };
 
-            {/* Warning Session Banner */}
-            {showWarningBanner && (
-              <div className="bg-amber-50 border-b border-amber-250 text-amber-900 px-6 py-2 flex items-center gap-2 text-xs font-semibold shrink-0">
-                <span className="material-symbols-outlined text-[16px] text-amber-700 animate-pulse">report</span>
-                <span>Session window expires in {sessionWindow?.text}. Reply using a standard message now to maintain the channel.</span>
-              </div>
-            )}
-
-            {/* Message Thread logs */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#f9f9ff]">
-              <div className="flex justify-center mb-2">
-                <span className="px-3 py-1 bg-slate-100 text-[#737686] text-[9px] rounded-full font-bold uppercase tracking-wider border border-[#c3c6d7]/30">
-                  Today
-                </span>
-              </div>
-
-              {msgsLoading ? (
-                <div className="flex flex-col justify-center items-center h-full text-xs text-[#737686] animate-pulse">
-                  Loading message logs...
-                </div>
-              ) : (
-                <AnimatePresence initial={false}>
-                  {messages?.map((msg) => {
-                    const isOutbound = msg.direction === 'OUTBOUND';
-                    return (
-                      <motion.div
-                        key={msg.id}
-                        initial={{ opacity: 0, y: 10, scale: 0.97 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{ duration: 0.2 }}
-                        className="flex flex-col"
-                      >
-                      <div
-                        className={cn(
-                          'flex flex-col max-w-[70%] rounded-2xl p-4 text-xs leading-relaxed shadow-sm border',
-                          isOutbound
-                            ? 'ml-auto bg-[#004ac6] border-[#004ac6] text-white rounded-tr-none'
-                            : 'bg-white border-[#c3c6d7]/70 text-[#1c1b1f] rounded-tl-none'
-                        )}
-                      >
-                        {msg.contextMessageId && (() => {
-                          const parentMsg = messages?.find(
-                            (m) => m.id === msg.contextMessageId || m.channelMessageId === msg.contextMessageId
-                          );
-                          if (!parentMsg) return null;
-                          return (
-                            <div className={cn(
-                              "mb-2 p-2 rounded-lg text-[10px] border-l-4 truncate max-w-full",
-                              isOutbound
-                                ? "bg-white/15 border-white text-white/95"
-                                : "bg-slate-100 border-[#004ac6] text-slate-800"
-                            )}>
-                              <span className="font-bold block text-[9px] opacity-80 mb-0.5">
-                                Quoting {parentMsg.senderType === 'AGENT' ? 'Agent' : parentMsg.senderType === 'BOT' ? 'AI Assistant' : 'Customer'}:
-                              </span>
-                              <p className="truncate italic">"{parentMsg.content}"</p>
-                            </div>
-                          );
-                        })()}
-                        <p className="break-words font-medium">{msg.content}</p>
-                        <div className="flex items-center justify-end gap-1 mt-2">
-                          <span
-                            suppressHydrationWarning
-                            className={cn(
-                              "text-[8px] leading-none",
-                              isOutbound ? "text-white/70" : "text-[#737686]"
-                            )}
-                          >
-                            {formatTimeString(msg.createdAt)}
-                          </span>
-                          {isOutbound && (
-                            <span
-                              className={cn(
-                                "material-symbols-outlined text-[12px]",
-                                msg.status === 'READ' ? "text-sky-300 font-bold" :
-                                msg.status === 'FAILED' ? "text-rose-300 font-bold" : "text-white/70"
-                              )}
-                              title={`Status: ${msg.status || 'SENT'}`}
-                            >
-                              {msg.status === 'FAILED' ? 'error' : msg.status === 'DELIVERED' || msg.status === 'READ' ? 'done_all' : 'done'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-              )}
-              <div ref={messageEndRef} />
-            </div>
-
-            {/* Message Composer */}
-            <footer className="p-4 bg-white border-t border-[#c3c6d7] space-y-4 shrink-0">
-              {sendReplyMutation.isError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center justify-between">
-                  <span>⚠️ Delivery Error: {(sendReplyMutation.error as Error)?.message || 'Failed to send WhatsApp message.'}</span>
-                  <button type="button" onClick={() => sendReplyMutation.reset()} className="text-xs text-rose-500 hover:text-rose-700 font-bold ml-2">
-                    Dismiss
-                  </button>
-                </div>
-              )}
-              <form onSubmit={handleSend} className="flex items-center gap-3">
-                <button
-                  type="button"
-                  className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-[#49454f]"
-                >
-                  <span className="material-symbols-outlined text-[20px]">add_circle</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={isRecording ? stopRecording : startRecording}
-                  className={cn(
-                    "w-9 h-9 rounded-full flex items-center justify-center transition-colors",
-                    isRecording ? "bg-rose-500 text-white animate-pulse" : "hover:bg-slate-100 text-[#49454f]"
-                  )}
-                  title={isRecording ? "Stop Recording Voice Note" : "Record Voice Note"}
-                >
-                  <span className="material-symbols-outlined text-[20px]">{isRecording ? "mic_off" : "mic"}</span>
-                </button>
-                {isRecording && (
-                  <div className="flex items-center gap-2 px-3 py-1 bg-rose-50 border border-rose-200 rounded-full text-rose-600 text-xs font-semibold animate-pulse">
-                    <span className="w-2 h-2 rounded-full bg-rose-500" />
-                    <span>Recording Voice Note... ({recordingSeconds}s)</span>
-                  </div>
-                )}
-                <div className="flex-1 relative">
-                  <textarea
-                    rows={2}
-                    required
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    disabled={sendReplyMutation.isPending}
-                    placeholder={
-                      isSessionClosed
-                        ? 'Session expired — use a Template or type a new message...'
-                        : 'Type your reply here...'
-                    }
-                    className="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-[#c3c6d7] rounded-xl focus:outline-none focus:border-[#004ac6] focus:ring-4 focus:ring-[#004ac6]/10 text-xs disabled:opacity-75 resize-none"
-                  />
-                  <button
-                    type="submit"
-                    disabled={sendReplyMutation.isPending || !replyText.trim()}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#004ac6] hover:brightness-95 disabled:opacity-50"
-                  >
-                    <span className="material-symbols-outlined text-[20px] font-bold">send</span>
-                  </button>
-                </div>
-              </form>
-
-              <div className="flex items-center justify-between" ref={dropdownRef}>
-                <div className="flex gap-3 relative">
-                  {/* Templates Button: active only when session is closed */}
-                  <button
-                    type="button"
-                    onClick={() => setShowTemplatesDropdown(!showTemplatesDropdown)}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-bold border transition-colors bg-[#004ac6]/5 border-[#004ac6]/20 text-[#004ac6] hover:bg-[#004ac6]/10"
-                  >
-                    <span className="material-symbols-outlined text-[14px]">description</span>
-                    Templates
-                  </button>
-
-                  {/* Templates Dropdown Overlay */}
-                  {showTemplatesDropdown && (
-                    <div className="absolute bottom-12 left-0 w-64 bg-white border border-[#c3c6d7] rounded-2xl shadow-xl z-50 overflow-hidden">
-                      <div className="px-4 py-2 bg-slate-50 border-b border-[#c3c6d7] text-[10px] font-bold text-[#49454f] uppercase tracking-wide">
-                        Approved WhatsApp Templates
-                      </div>
-                      <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
-                        {!templates || templates.length === 0 ? (
-                          <div className="p-4 text-center text-xs text-[#737686]">
-                            No templates configured.
-                          </div>
-                        ) : (
-                          templates.map((t) => (
-                            <button
-                              key={t.id}
-                              type="button"
-                              onClick={() => {
-                                setReplyText(t.content);
-                                setShowTemplatesDropdown(false);
-                              }}
-                              className="w-full px-4 py-3 text-left hover:bg-slate-50 text-xs font-semibold text-[#1c1b1f] flex flex-col gap-0.5"
-                            >
-                              <span>{t.name}</span>
-                              <span className="text-[10px] text-[#737686] font-medium truncate w-full">
-                                {t.content}
-                              </span>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-[#c3c6d7] rounded-xl text-[10px] font-bold text-[#49454f] transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[14px]">attach_file</span>
-                    Internal Note
-                  </button>
-                </div>
-                <div className="text-[9px] text-[#737686] font-semibold italic">
-                  Message will be sent as supportive tenant representative
-                </div>
-              </div>
-            </footer>
-          </>
+            if (chan === 'IMESSAGE') {
+              return <IMessageChatView {...commonProps} />;
+            }
+            if (chan === 'INSTAGRAM') {
+              return <InstagramChatView {...commonProps} />;
+            }
+            // Default to authentic WhatsApp Web interface
+            return <WhatsAppChatView {...commonProps} />;
+          })()
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
             <span className="material-symbols-outlined text-[48px] text-[#737686] mb-4">
@@ -757,7 +591,7 @@ export default function InboxPage() {
             </span>
             <h4 className="text-xs font-bold text-[#1c1b1f]">No Chat Selected</h4>
             <p className="text-[11px] text-[#49454f] max-w-xs mt-1 leading-relaxed">
-              Select an active conversation thread from the left menu to view logs, toggle automatic AI filters, and send manual replies.
+              Select an active conversation thread from the left menu to view the channel-native chat interface, live messages, and send replies.
             </p>
           </div>
         )}
