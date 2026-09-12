@@ -159,6 +159,7 @@ model Tenant {
   broadcastJobs        BroadcastJob[]
   reminderJobs         ReminderJob[]
   whatsAppNumber       WhatsAppNumber?
+  instagramAccount     InstagramAccount?
   templates            Template[]
   auditLogs            AuditLog[]
   botConfig            BotConfig?
@@ -546,6 +547,25 @@ model WhatsAppNumber {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+}
+
+model InstagramAccount {
+  id                 String    @id @default(cuid())
+  tenantId           String    @unique
+  instagramId        String    // Instagram Business Account ID
+  username           String?   // e.g. @your_brand
+  pageId             String    // Connected Facebook Page ID
+  pageAccessToken    String    @db.Text // Encrypted Page Access Token
+  tokenExpiresAt     DateTime?
+  status             String    @default("CONNECTED")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([instagramId])
 }
 
 enum TemplateCategory {

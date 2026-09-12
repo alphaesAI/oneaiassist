@@ -16,6 +16,16 @@ import {
   Sparkles
 } from 'lucide-react';
 
+function InstagramIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
+
 type ConnectMethod = 'QR' | 'PHONE';
 type EngineType = 'BAILEYS' | 'OPENWA';
 
@@ -45,6 +55,14 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
   const [metaVerifyToken, setMetaVerifyToken] = useState('oneai_meta_verify_secret_123');
   const [metaSaveSuccess, setMetaSaveSuccess] = useState(false);
   const [phoneAlias, setPhoneAlias] = useState('+1 (555) 019-2834 (Prime Marketing Main Line)');
+
+  // Instagram Channel States
+  const [igId, setIgId] = useState('');
+  const [igUsername, setIgUsername] = useState('');
+  const [igPageId, setIgPageId] = useState('');
+  const [igAccessToken, setIgAccessToken] = useState('');
+  const [igSaveSuccess, setIgSaveSuccess] = useState(false);
+  const [igError, setIgError] = useState('');
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -102,6 +120,74 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
     },
     enabled: !!tenantId,
     refetchInterval: 10000,
+  });
+
+  // Fetch Instagram Channel status
+  const { data: igStatus, refetch: refetchIgStatus } = useQuery<{
+    connected: boolean;
+    instagramId?: string;
+    username?: string;
+    pageId?: string;
+    status: string;
+  }>({
+    queryKey: ['instagramStatus', tenantId],
+    queryFn: async () => {
+      const res = await fetch('/api/channels/instagram');
+      return res.json();
+    },
+    enabled: !!tenantId,
+  });
+
+  useEffect(() => {
+    if (igStatus?.connected) {
+      if (igStatus.instagramId) setIgId(igStatus.instagramId);
+      if (igStatus.username) setIgUsername(igStatus.username);
+      if (igStatus.pageId) setIgPageId(igStatus.pageId);
+    }
+  }, [igStatus]);
+
+  const saveIgMutation = useMutation({
+    mutationFn: async () => {
+      setIgError('');
+      const res = await fetch('/api/channels/instagram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instagramId: igId,
+          username: igUsername,
+          pageId: igPageId,
+          pageAccessToken: igAccessToken,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save Instagram account');
+      return data;
+    },
+    onSuccess: () => {
+      setIgSaveSuccess(true);
+      refetchIgStatus();
+      queryClient.invalidateQueries({ queryKey: ['instagramStatus', tenantId] });
+      setTimeout(() => setIgSaveSuccess(false), 4000);
+    },
+    onError: (err: any) => {
+      setIgError(err.message || 'Error saving Instagram credentials');
+    },
+  });
+
+  const disconnectIgMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/channels/instagram', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to disconnect Instagram');
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchIgStatus();
+      setIgId('');
+      setIgUsername('');
+      setIgPageId('');
+      setIgAccessToken('');
+      queryClient.invalidateQueries({ queryKey: ['instagramStatus', tenantId] });
+    },
   });
 
   const stopPolling = useCallback(() => {
@@ -535,6 +621,130 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
           {statusMsg && <p className="text-xs text-blue-800 font-semibold bg-blue-50 p-3 rounded-lg border border-blue-200">{statusMsg}</p>}
         </div>
       )}
+
+      {/* Instagram Direct Messaging Gateway Card */}
+      <div className="bg-white border border-[#c3c6d7] rounded-2xl p-6 shadow-sm space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-white shadow-sm">
+              <InstagramIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-base font-bold text-[#1c1b1f]">Instagram Direct Messages</h4>
+                {igStatus?.connected ? (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    Connected {igStatus.username ? `(@${igStatus.username})` : ''}
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200">
+                    Not Connected
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#49454f] mt-0.5">
+                Connect your Instagram Professional / Creator account to let the AI Agent reply to incoming DMs automatically.
+              </p>
+            </div>
+          </div>
+          {igStatus?.connected && (
+            <button
+              type="button"
+              onClick={() => disconnectIgMutation.mutate()}
+              disabled={disconnectIgMutation.isPending}
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 border border-rose-200 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition"
+            >
+              {disconnectIgMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
+            </button>
+          )}
+        </div>
+
+        {/* Credentials Form */}
+        <div className="space-y-4 pt-2 border-t border-gray-100">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Instagram Business Account ID <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={igId}
+                onChange={(e) => setIgId(e.target.value)}
+                placeholder="e.g. 17841400000000000"
+                className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Instagram Handle / Username
+              </label>
+              <input
+                type="text"
+                value={igUsername}
+                onChange={(e) => setIgUsername(e.target.value)}
+                placeholder="e.g. @your_agency_official"
+                className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Connected Facebook Page ID
+              </label>
+              <input
+                type="text"
+                value={igPageId}
+                onChange={(e) => setIgPageId(e.target.value)}
+                placeholder="e.g. 102938475610293"
+                className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Page Access Token (Encrypted AES-256) <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={igAccessToken}
+                onChange={(e) => setIgAccessToken(e.target.value)}
+                placeholder={igStatus?.connected ? "••••••••••••••••••••••••" : "EAAB..."}
+                className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+              />
+            </div>
+          </div>
+
+          <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-[11px] text-amber-900 space-y-1">
+            <p className="font-bold flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+              Meta Platform Policy & In-App Requirement:
+            </p>
+            <p>
+              1. Inside your Instagram mobile app: <strong>Settings & Privacy ➔ Messages & Story Replies ➔ Message Controls ➔ Connected Tools ➔ Toggle ON "Allow Access to Messages"</strong>.
+            </p>
+            <p>
+              2. Outbound AI responses are strictly permitted within <strong>24 hours</strong> of the customer&apos;s last DM.
+            </p>
+          </div>
+
+          {igError && <p className="text-xs text-rose-600 font-semibold">{igError}</p>}
+          {igSaveSuccess && (
+            <p className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 font-bold">
+              ✓ Instagram credentials securely saved and encrypted! Inbound DMs are now active.
+            </p>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => saveIgMutation.mutate()}
+              disabled={saveIgMutation.isPending || !igId || (!igAccessToken && !igStatus?.connected)}
+              className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700 text-white font-bold text-xs rounded-xl shadow-sm transition disabled:opacity-50"
+            >
+              {saveIgMutation.isPending ? 'Connecting...' : 'Save & Connect Instagram'}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Phone Alias & Display Settings */}
       <div className="bg-white border border-[#c3c6d7] rounded-2xl p-6 shadow-sm space-y-4">
