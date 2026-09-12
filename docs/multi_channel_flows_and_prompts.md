@@ -182,6 +182,8 @@ It connects every prompt and instruction provided by the user with the technical
 
 ## 2. End-to-End System Architecture Diagram
 
+![Figure 1: Multi-Channel Ingress, Queue & Outbound Architecture](./images/multi_channel_architecture.png)
+
 ```mermaid
 flowchart TD
     subgraph Inbound Channels
@@ -368,6 +370,38 @@ QUESTION: ${rawMessage}
 | **Claim Dispute** | `claim was denied`, `claim rejected`, `bad faith`, `wrongful denial`, `appeal claim` | *"We understand you are disputing a recent claim determination. To ensure full compliance with state claims settlement guidelines, your file is now assigned to a Licensed Claims Supervisor who will review the adjudication details."* |
 | **Grievance / Fraud** | `formal complaint`, `grievance`, `fraud`, `scam`, `unauthorized charge`, `illegal practice` | *"Your formal grievance has been registered. Our Quality & Compliance team is reviewing your account history and will reach out promptly."* |
 | **Policy Cancellation** | `cancel my policy`, `terminate coverage`, `stop my insurance`, `surrender policy` | *"We have received your policy cancellation request. A licensed retention specialist has been assigned to assist you with the necessary termination documentation and statutory notice period requirements."* |
+
+---
+
+### State Transition & Human Takeover Diagram
+
+![Figure 2: Stateful Lead Qualification & Compliance State Machine](./images/state_transition_diagram.png)
+
+```mermaid
+stateDiagram-v2
+    [*] --> NEW_LEAD: Inbound Message Received
+    NEW_LEAD --> IN_PROGRESS: Dynamic Intake Wizard Started
+    
+    state IN_PROGRESS {
+        [*] --> Collect_Age
+        Collect_Age --> Collect_State: Age Validated
+        Collect_State --> Collect_Health: State Validated
+        Collect_Health --> Collect_Budget: Conditions Logged
+        Collect_Budget --> Collect_Family: Budget Validated
+        Collect_Family --> Complete: Family Size Logged
+    }
+
+    IN_PROGRESS --> HANDED_OFF: User says human, agent, speak to someone
+    IN_PROGRESS --> HUMAN_ESCALATED: Compliance Trigger
+    IN_PROGRESS --> QUALIFIED: All 5 Parameters Collected
+
+    QUALIFIED --> PROPOSAL_SENT: RecommendationEngine matches >= 1 Policy
+    QUALIFIED --> HUMAN_ESCALATED: 0 Policies matched within budget
+
+    PROPOSAL_SENT --> HUMAN_ESCALATED: Prospect asks to speak with Advisor
+    HANDED_OFF --> [*]: Human Agent Chatting in Dashboard
+    HUMAN_ESCALATED --> [*]: Human Agent Chatting in Dashboard
+```
 
 ---
 
