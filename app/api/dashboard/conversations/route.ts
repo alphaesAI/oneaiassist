@@ -57,6 +57,7 @@ export async function GET() {
 
         return {
           id: conv.id,
+          channel: conv.channel,
           status: conv.status,
           lastMessageAt: conv.lastMessageAt,
           needsEscalation: conv.needsEscalation,

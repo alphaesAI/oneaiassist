@@ -115,6 +115,8 @@ export class InboundJobWorker {
 
       const normalizedPhone = normalizePhoneNumber(job.senderPhone || payload.from || '');
 
+      const channel = (payload.channel || 'WHATSAPP').toUpperCase() as any;
+
       // 2. Resolve Conversation and Inbound Message record if not already created
       if (!conversationId) {
         // Find or create customer
@@ -142,7 +144,7 @@ export class InboundJobWorker {
               customerChannels: {
                 create: {
                   tenantId,
-                  channel: 'WHATSAPP',
+                  channel,
                   channelIdentifier: normalizedPhone,
                   channelMetadata: {},
                 },
@@ -156,7 +158,7 @@ export class InboundJobWorker {
           where: {
             tenantId,
             customerId: customer.id,
-            channel: 'WHATSAPP',
+            channel,
           },
         });
 
@@ -165,7 +167,7 @@ export class InboundJobWorker {
             data: {
               tenantId,
               customerId: customer.id,
-              channel: 'WHATSAPP',
+              channel,
               status: 'OPEN',
               lastMessageAt: new Date(),
             },
@@ -184,7 +186,7 @@ export class InboundJobWorker {
               direction: 'INBOUND',
               senderType: 'CUSTOMER',
               content: rawText,
-              channel: 'WHATSAPP',
+              channel,
               channelMessageId: job.wamId,
               messageType: 'TEXT',
               status: 'READ',

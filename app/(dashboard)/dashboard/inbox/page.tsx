@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface Conversation {
   id: string;
+  channel?: 'WHATSAPP' | 'IMESSAGE' | 'INSTAGRAM' | 'SMS' | string;
   status: 'OPEN' | 'CLOSED' | 'PENDING';
   lastMessageAt: string;
   needsEscalation: boolean;
@@ -56,7 +57,7 @@ export default function InboxPage() {
 
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
-  const [activeTab, setActiveTab] = useState<'ALL' | 'UNREAD' | 'AI' | 'ESCALATED' | 'INSTAGRAM' | 'PENDING' | 'CLOSED'>('ALL');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'UNREAD' | 'AI' | 'ESCALATED' | 'IMESSAGE' | 'INSTAGRAM' | 'PENDING' | 'CLOSED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false);
   const [isIntakeExpanded, setIsIntakeExpanded] = useState(true);
@@ -316,6 +317,7 @@ export default function InboxPage() {
     }
     if (activeTab === 'AI') return !conv.needsEscalation;
     if (activeTab === 'ESCALATED') return conv.needsEscalation;
+    if (activeTab === 'IMESSAGE') return (conv as any).channel === 'IMESSAGE';
     if (activeTab === 'INSTAGRAM') return (conv as any).channel === 'INSTAGRAM';
     if (activeTab === 'PENDING') return conv.status === 'PENDING';
 
@@ -354,7 +356,7 @@ export default function InboxPage() {
 
         {/* Tab Selection */}
         <div className="flex px-2 border-b border-[#c3c6d7]/60 overflow-x-auto shrink-0 scrollbar-none">
-          {(['ALL', 'UNREAD', 'AI', 'ESCALATED', 'INSTAGRAM', 'PENDING', 'CLOSED'] as const).map((tab) => (
+          {(['ALL', 'UNREAD', 'AI', 'ESCALATED', 'IMESSAGE', 'INSTAGRAM', 'PENDING', 'CLOSED'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -365,7 +367,7 @@ export default function InboxPage() {
                   : 'border-transparent text-[#737686] hover:text-[#1c1b1f]'
               )}
             >
-              {tab === 'AI' ? 'AI Handling' : tab.toLowerCase()}
+              {tab === 'AI' ? 'AI Handling' : tab === 'IMESSAGE' ? 'iMessage' : tab.toLowerCase()}
             </button>
           ))}
         </div>
