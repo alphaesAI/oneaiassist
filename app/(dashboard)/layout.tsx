@@ -1,6 +1,7 @@
 import React from 'react';
 import DashboardSidebar from '@/components/dashboard-sidebar';
 import DashboardHeader from '@/components/dashboard-header';
+import { SidebarProvider } from '@/lib/sidebar-context';
 
 export default function DashboardLayout({
   children,
@@ -8,22 +9,24 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#f9f9ff] text-[#1c1b1f] flex overflow-hidden">
-      {/* Dynamic Role-Gated Sidebar */}
-      <DashboardSidebar />
+    <SidebarProvider>
+      <div className="h-screen w-screen overflow-hidden flex bg-[#f9f9ff] text-[#1c1b1f]">
+        {/* Dynamic Role-Gated Sidebar (Desktop Fixed + Mobile Drawer) */}
+        <DashboardSidebar />
 
-      {/* Main Panel Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header Bar */}
-        <DashboardHeader />
+        {/* Main Panel Content */}
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+          {/* Top Header Bar */}
+          <DashboardHeader />
 
-        {/* Child Page Frame */}
-        <div className="flex-1 overflow-y-auto p-6 sm:p-8">
-          <div className="max-w-6xl mx-auto">
-            {children}
-          </div>
+          {/* Child Page Frame */}
+          <main className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+            <div className="w-full max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8 flex-1 flex flex-col min-h-0">
+              {children}
+            </div>
+          </main>
         </div>
       </div>
-    </div>
+    </SidebarProvider>
   );
 }

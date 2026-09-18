@@ -337,7 +337,7 @@ export default function InboxPage() {
   const showWarningBanner = !isSessionClosed && sessionWindow!.msRemaining < 6 * 60 * 60 * 1000;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] gap-3 font-sans text-[#1c1b1f]">
+    <div className="flex flex-col flex-1 h-full min-h-0 gap-3 font-sans text-[#1c1b1f]">
       {/* TOP CHANNEL HUB SELECTOR BAR */}
       <div className="flex items-center justify-between bg-white border border-[#c3c6d7] rounded-xl px-4 py-2.5 shadow-sm shrink-0">
         <div className="flex items-center gap-2">
