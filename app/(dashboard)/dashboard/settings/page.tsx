@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
 import { 
   SlidersHorizontal,
+  Smartphone,
   Users,
   Sparkles,
   Code2,
@@ -11,25 +13,26 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
+import SettingsChannelsTab from '@/components/settings-channels-tab';
 import SettingsWorkspaceTab from '@/components/settings-workspace-tab';
 import SettingsAiTab from '@/components/settings-ai-tab';
 import SettingsDeveloperTab from '@/components/settings-developer-tab';
 import SettingsAccountTab from '@/components/settings-account-tab';
 import SettingsComplianceTab from '@/components/settings-compliance-tab';
 
-type SettingsTab = 'workspace' | 'ai' | 'developer' | 'account' | 'compliance';
+type SettingsTab = 'channels' | 'workspace' | 'ai' | 'developer' | 'account' | 'compliance';
 
 export default function SettingsPage() {
   const { data: info } = useTenantInfo();
   const tenantId = info?.tenantId;
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('workspace');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('channels');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab') as SettingsTab;
-      if (tabParam && ['workspace', 'ai', 'developer', 'account', 'compliance'].includes(tabParam)) {
+      if (tabParam && ['channels', 'workspace', 'ai', 'developer', 'account', 'compliance'].includes(tabParam)) {
         setActiveTab(tabParam);
       }
     }
@@ -50,8 +53,21 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* 5-Tab Clustered Secondary Navigation Bar */}
+      {/* 6-Tab Clustered Secondary Navigation Bar */}
       <div className="flex items-center gap-2 border-b border-gray-200 overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab('channels')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition shrink-0 ${
+            activeTab === 'channels'
+              ? 'border-[#004ac6] text-[#004ac6]'
+              : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+          }`}
+        >
+          <Smartphone className="w-4 h-4" />
+          <span>Channels (WhatsApp & Meta)</span>
+        </button>
+
         <button
           type="button"
           onClick={() => setActiveTab('workspace')}
@@ -118,13 +134,24 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      {/* Tab Contents */}
+      {/* Tab Contents with Smooth Crossfades */}
       <div className="pt-2">
-        {activeTab === 'workspace' && <SettingsWorkspaceTab tenantId={tenantId} />}
-        {activeTab === 'ai' && <SettingsAiTab />}
-        {activeTab === 'developer' && <SettingsDeveloperTab />}
-        {activeTab === 'account' && <SettingsAccountTab />}
-        {activeTab === 'compliance' && <SettingsComplianceTab />}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {activeTab === 'channels' && <SettingsChannelsTab tenantId={tenantId} />}
+            {activeTab === 'workspace' && <SettingsWorkspaceTab tenantId={tenantId} />}
+            {activeTab === 'ai' && <SettingsAiTab />}
+            {activeTab === 'developer' && <SettingsDeveloperTab />}
+            {activeTab === 'account' && <SettingsAccountTab />}
+            {activeTab === 'compliance' && <SettingsComplianceTab />}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );

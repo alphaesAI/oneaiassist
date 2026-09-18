@@ -1,17 +1,36 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
+import { useSidebar } from '@/lib/sidebar-context';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion, LayoutGroup } from 'framer-motion';
+import {
+  LayoutDashboard,
+  Inbox,
+  Users,
+  UserCheck,
+  Megaphone,
+  CalendarClock,
+  LineChart,
+  BarChart3,
+  Bot,
+  FileText,
+  Settings,
+  ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  LucideIcon,
+} from 'lucide-react';
 
 interface NavItem {
   name: string;
   href: string;
-  roles?: string[]; // If undefined, accessible by all roles
-  icon: string; // Material symbol name
+  roles?: string[];
+  icon: LucideIcon;
 }
 
 interface NavSection {
@@ -21,9 +40,15 @@ interface NavSection {
 
 export default function DashboardSidebar() {
   const pathname = usePathname();
-  const { data: info, isLoading } = useTenantInfo();
+  const { data: info } = useTenantInfo();
+  const { isMobileOpen, setIsMobileOpen, isCollapsed, toggleCollapsed } = useSidebar();
 
   const userRole = info?.role || '';
+
+  // Close mobile drawer automatically when route changes
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [pathname, setIsMobileOpen]);
 
   const sections: NavSection[] = [
     {
@@ -32,48 +57,48 @@ export default function DashboardSidebar() {
         {
           name: 'Dashboard',
           href: '/dashboard',
-          icon: 'dashboard',
+          icon: LayoutDashboard,
         },
         {
           name: 'Inbox',
           href: '/dashboard/inbox',
           roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER', 'AGENT'],
-          icon: 'inbox',
+          icon: Inbox,
         },
         {
           name: 'Leads',
           href: '/dashboard/leads',
           roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER', 'AGENT'],
-          icon: 'group',
+          icon: Users,
         },
         {
           name: 'Customers',
           href: '/dashboard/customers',
           roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER', 'AGENT'],
-          icon: 'person',
+          icon: UserCheck,
         },
         {
           name: 'Campaigns',
           href: '/dashboard/campaigns',
           roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER', 'AGENT'],
-          icon: 'campaign',
+          icon: Megaphone,
         },
         {
           name: 'Sequences',
           href: '/dashboard/sequences',
           roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER'],
-          icon: 'schedule',
+          icon: CalendarClock,
         },
         {
           name: 'Marketing',
           href: '/dashboard/marketing',
           roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER'],
-          icon: 'ads_click',
+          icon: LineChart,
         },
         {
           name: 'Analytics',
           href: '/dashboard/analytics',
-          icon: 'monitoring',
+          icon: BarChart3,
         },
       ],
     },
@@ -84,13 +109,13 @@ export default function DashboardSidebar() {
           name: 'AI & Bot',
           href: '/dashboard/ai-bot',
           roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER', 'AGENT'],
-          icon: 'smart_toy',
+          icon: Bot,
         },
         {
           name: 'Templates',
           href: '/dashboard/templates',
           roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER', 'AGENT'],
-          icon: 'description',
+          icon: FileText,
         },
       ],
     },
@@ -101,63 +126,85 @@ export default function DashboardSidebar() {
           name: 'Settings',
           href: '/dashboard/settings',
           roles: ['PLATFORM_OWNER', 'ADMIN'],
-          icon: 'settings',
+          icon: Settings,
         },
         {
           name: 'Superadmin',
           href: '/superadmin',
           roles: ['PLATFORM_OWNER'],
-          icon: 'admin_panel_settings',
+          icon: ShieldCheck,
         },
       ],
     },
   ];
 
-  return (
-    <aside className="w-64 bg-[#1B4B91] border-r border-white/10 flex flex-col z-20 shrink-0 font-sans text-white h-screen sticky top-0">
-      {/* Brand Logo */}
-      <div className="px-6 py-4 border-b border-white/10 flex items-center gap-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/OneAILogo.png" alt="OneAIAssist Logo" className="h-8 w-auto object-contain" />
-        <span className="font-bold tracking-tight text-white text-lg">
-          OneAIAssist
-        </span>
+  const renderNavContent = (collapsed: boolean) => (
+    <>
+      {/* Brand Header */}
+      <div className={cn(
+        "py-4 border-b border-white/10 flex items-center shrink-0 transition-all",
+        collapsed ? "px-3 justify-center" : "px-6 justify-between"
+      )}>
+        <Link href="/dashboard" className="flex items-center gap-3 min-w-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/OneAILogo.png"
+            alt="OneAIAssist Logo"
+            className="h-8 w-8 shrink-0 object-contain"
+          />
+          {!collapsed && (
+            <span className="font-bold tracking-tight text-white text-lg truncate">
+              OneAIAssist
+            </span>
+          )}
+        </Link>
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className="hidden lg:flex items-center justify-center w-7 h-7 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+            title="Collapse sidebar"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Nav List */}
-      <nav className="flex-1 px-4 py-5 space-y-6 overflow-y-auto">
-        {isLoading ? (
-          <div className="space-y-2.5 px-2">
-            {[...Array(10)].map((_, i) => (
-              <div key={i} className="h-9 w-full bg-white/10 animate-pulse rounded-lg" />
-            ))}
-          </div>
-        ) : (
-          sections.map((section) => {
-            // Filter section items by user role
+      <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto overflow-x-hidden">
+        <LayoutGroup id={collapsed ? "sidebar-collapsed" : "sidebar-expanded"}>
+          {sections.map((section) => {
             const filteredItems = section.items.filter(
-              (item) => !item.roles || item.roles.includes(userRole)
+              (item) => !item.roles || !userRole || item.roles.includes(userRole)
             );
 
             if (filteredItems.length === 0) return null;
 
             return (
-              <div key={section.title} className="space-y-1.5">
-                {/* Section Header */}
-                <h5 className="px-4 text-[10px] font-bold text-[#E2E8F0]/40 uppercase tracking-widest text-left">
-                  {section.title}
-                </h5>
+              <div key={section.title} className="space-y-1">
+                {!collapsed && (
+                  <h5 className="px-3 text-[10px] font-bold text-[#E2E8F0]/40 uppercase tracking-widest text-left truncate">
+                    {section.title}
+                  </h5>
+                )}
 
-                {/* Section Items */}
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {filteredItems.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                    const isActive =
+                      pathname === item.href ||
+                      (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                    const IconComponent = item.icon;
+
                     return (
                       <Link
                         key={item.name}
                         href={item.href}
+                        title={collapsed ? item.name : undefined}
                         className={cn(
-                          'relative flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+                          'relative flex items-center rounded-lg text-sm font-medium transition-colors duration-150',
+                          collapsed
+                            ? 'justify-center p-2.5'
+                            : 'gap-3 px-3.5 py-2.5',
                           isActive
                             ? 'text-white font-semibold shadow-sm'
                             : 'text-[#E2E8F0] hover:text-white hover:bg-white/[0.08]'
@@ -167,31 +214,100 @@ export default function DashboardSidebar() {
                           <motion.div
                             layoutId="activeSidebarTab"
                             className="absolute inset-0 bg-[#2563EB] rounded-lg -z-0"
-                            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
                           />
                         )}
-                        <span className="material-symbols-outlined text-[20px] shrink-0 z-10">
-                          {item.icon}
-                        </span>
-                        <span className="z-10">{item.name}</span>
+                        <IconComponent className={cn("shrink-0 z-10", collapsed ? "w-5 h-5" : "w-5 h-5")} />
+                        {!collapsed && (
+                          <span className="z-10 truncate text-xs font-medium">
+                            {item.name}
+                          </span>
+                        )}
                       </Link>
                     );
                   })}
                 </div>
               </div>
             );
-          })
-        )}
+          })}
+        </LayoutGroup>
       </nav>
 
-      {/* Bottom Profile / Footer Section */}
-      <div className="p-4 border-t border-white/10 text-xs text-[#E2E8F0]/70 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="font-medium text-white/90">System Online</span>
-        </div>
-        <span className="text-[10px] uppercase font-bold text-white/50 tracking-wider">v1.0</span>
+      {/* Footer / System Status */}
+      <div className={cn(
+        "p-3.5 border-t border-white/10 text-xs text-[#E2E8F0]/70 flex items-center shrink-0",
+        collapsed ? "justify-center" : "justify-between"
+      )}>
+        {collapsed ? (
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+            title="Expand sidebar"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 truncate">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="font-medium text-white/90 text-[11px] truncate">System Online</span>
+            </div>
+            <span className="text-[10px] uppercase font-bold text-white/50 tracking-wider">v1.0</span>
+          </>
+        )}
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile Drawer Backdrop */}
+      <div
+        className={cn(
+          "fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300",
+          isMobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}
+        onClick={() => setIsMobileOpen(false)}
+        aria-hidden="true"
+      />
+
+      {/* Mobile Slide-Over Drawer */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex flex-col bg-[#1B4B91] border-r border-white/10 text-white w-72 lg:hidden transition-transform duration-300 ease-in-out shadow-2xl h-full",
+          isMobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/OneAILogo.png" alt="Logo" className="h-8 w-8 object-contain" />
+            <span className="font-bold text-white text-lg">OneAIAssist</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsMobileOpen(false)}
+            className="p-1.5 rounded-lg hover:bg-white/10 text-white/70 hover:text-white"
+            aria-label="Close sidebar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 flex flex-col min-h-0">
+          {renderNavContent(false)}
+        </div>
+      </aside>
+
+      {/* Desktop Fixed Sidebar */}
+      <aside
+        className={cn(
+          "hidden lg:flex flex-col h-screen shrink-0 bg-[#1B4B91] border-r border-white/10 text-white transition-[width] duration-200 ease-in-out z-20 sticky top-0",
+          isCollapsed ? "w-20" : "w-64"
+        )}
+      >
+        {renderNavContent(isCollapsed)}
+      </aside>
+    </>
   );
 }

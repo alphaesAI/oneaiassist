@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Bell } from 'lucide-react';
 
 interface NotificationItem {
   id: string;
@@ -72,88 +74,97 @@ export default function NotificationBell() {
       {/* Bell Icon Trigger */}
       <button
         suppressHydrationWarning
+        type="button"
         onClick={toggleDropdown}
-        className="h-10 w-10 hover:bg-slate-100 rounded-full flex items-center justify-center text-[#49454f] relative transition-colors focus:outline-none"
+        className="h-9 w-9 hover:bg-slate-100 rounded-full flex items-center justify-center text-[#49454f] hover:text-[#1c1b1f] relative transition-all active:scale-95 focus:outline-none"
+        aria-label="Toggle notifications"
       >
-        <span className="material-symbols-outlined text-[22px]">
-          notifications
-        </span>
+        <Bell className="w-4 h-4" />
         {unreadCount > 0 && (
-          <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 bg-[#004ac6] border-2 border-white rounded-full flex items-center justify-center text-[9px] font-bold text-white px-0.5">
+          <span className="absolute top-1 right-1 min-w-[15px] h-3.5 bg-[#004ac6] border-2 border-white rounded-full flex items-center justify-center text-[9px] font-bold text-white px-0.5 shadow-xs">
             {unreadCount}
           </span>
         )}
       </button>
 
-      {/* Dropdown Container */}
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white border border-[#c3c6d7] rounded-2xl shadow-xl z-50 overflow-hidden animate-fade-in">
-          {/* Header */}
-          <div className="px-4 py-3 bg-slate-50 border-b border-[#c3c6d7] flex items-center justify-between">
-            <span className="text-xs font-bold text-[#1c1b1f]">Notifications</span>
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                className="text-[10px] font-bold text-[#004ac6] hover:underline"
-              >
-                Mark all as read
-              </button>
-            )}
-          </div>
-
-          {/* List */}
-          <div className="divide-y divide-[#c3c6d7]/60 max-h-72 overflow-y-auto">
-            {notifications.length === 0 ? (
-              <div className="px-4 py-6 text-center text-xs text-[#737686]">
-                No notifications found.
-              </div>
-            ) : (
-              notifications.map((n) => (
-                <div
-                  key={n.id}
-                  onClick={() => markAsRead(n.id)}
-                  className={`p-4 flex gap-3 cursor-pointer hover:bg-slate-50/80 transition-colors ${
-                    !n.read ? 'bg-slate-50/30' : ''
-                  }`}
+      {/* Animated Dropdown Container */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -6 }}
+            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute right-0 mt-2 w-80 bg-white border border-[#c3c6d7] rounded-2xl shadow-xl z-50 overflow-hidden origin-top-right"
+          >
+            {/* Header */}
+            <div className="px-4 py-3 bg-slate-50 border-b border-[#c3c6d7] flex items-center justify-between">
+              <span className="text-xs font-bold text-[#1c1b1f]">Notifications</span>
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={markAllAsRead}
+                  className="text-[10px] font-bold text-[#004ac6] hover:underline"
                 >
-                  {/* Status Indicator Dot */}
-                  <div className="shrink-0 mt-1">
-                    {n.type === 'success' && (
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 block" />
-                    )}
-                    {n.type === 'warning' && (
-                      <span className="h-2 w-2 rounded-full bg-amber-500 block animate-pulse" />
-                    )}
-                    {n.type === 'info' && (
-                      <span className="h-2 w-2 rounded-full bg-blue-500 block" />
-                    )}
-                  </div>
+                  Mark all as read
+                </button>
+              )}
+            </div>
 
-                  {/* Body Text */}
-                  <div className="flex-1 space-y-0.5">
-                    <div className="flex justify-between items-baseline">
-                      <h4 className={`text-xs ${!n.read ? 'font-bold text-[#1c1b1f]' : 'font-medium text-[#49454f]'}`}>
-                        {n.title}
-                      </h4>
-                      <span className="text-[9px] text-[#737686] font-medium">{n.time}</span>
-                    </div>
-                    <p className="text-[11px] text-[#49454f] leading-relaxed">
-                      {n.description}
-                    </p>
-                  </div>
+            {/* List */}
+            <div className="divide-y divide-[#c3c6d7]/60 max-h-72 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <div className="px-4 py-6 text-center text-xs text-[#737686]">
+                  No notifications found.
                 </div>
-              ))
-            )}
-          </div>
+              ) : (
+                notifications.map((n) => (
+                  <div
+                    key={n.id}
+                    onClick={() => markAsRead(n.id)}
+                    className={`p-4 flex gap-3 cursor-pointer hover:bg-slate-50/80 transition-colors ${
+                      !n.read ? 'bg-slate-50/40' : ''
+                    }`}
+                  >
+                    {/* Status Indicator Dot */}
+                    <div className="shrink-0 mt-1">
+                      {n.type === 'success' && (
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 block" />
+                      )}
+                      {n.type === 'warning' && (
+                        <span className="h-2 w-2 rounded-full bg-amber-500 block" />
+                      )}
+                      {n.type === 'info' && (
+                        <span className="h-2 w-2 rounded-full bg-blue-500 block" />
+                      )}
+                    </div>
 
-          {/* Footer */}
-          <div className="px-4 py-2 bg-slate-50 border-t border-[#c3c6d7] text-center">
-            <span className="text-[9px] font-extrabold text-[#737686] uppercase tracking-wide">
-              Recent Alerts
-            </span>
-          </div>
-        </div>
-      )}
+                    {/* Body Text */}
+                    <div className="flex-1 space-y-0.5">
+                      <div className="flex justify-between items-baseline">
+                        <h4 className={`text-xs ${!n.read ? 'font-bold text-[#1c1b1f]' : 'font-medium text-[#49454f]'}`}>
+                          {n.title}
+                        </h4>
+                        <span className="text-[9px] text-[#737686] font-medium">{n.time}</span>
+                      </div>
+                      <p className="text-[11px] text-[#49454f] leading-relaxed">
+                        {n.description}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-4 py-2 bg-slate-50 border-t border-[#c3c6d7] text-center">
+              <span className="text-[9px] font-extrabold text-[#737686] uppercase tracking-wide">
+                Recent Alerts
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

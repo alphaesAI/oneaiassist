@@ -337,7 +337,7 @@ export default function InboxPage() {
   const showWarningBanner = !isSessionClosed && sessionWindow!.msRemaining < 6 * 60 * 60 * 1000;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] gap-3 font-sans text-[#1c1b1f]">
+    <div className="flex flex-col flex-1 h-full min-h-0 gap-3 font-sans text-[#1c1b1f]">
       {/* TOP CHANNEL HUB SELECTOR BAR */}
       <div className="flex items-center justify-between bg-white border border-[#c3c6d7] rounded-xl px-4 py-2.5 shadow-sm shrink-0">
         <div className="flex items-center gap-2">
@@ -573,14 +573,25 @@ export default function InboxPage() {
               needsEscalation: selectedConv.needsEscalation,
             };
 
-            if (chan === 'IMESSAGE') {
-              return <IMessageChatView {...commonProps} />;
-            }
-            if (chan === 'INSTAGRAM') {
-              return <InstagramChatView {...commonProps} />;
-            }
-            // Default to authentic WhatsApp Web interface
-            return <WhatsAppChatView {...commonProps} />;
+            const chatElement = chan === 'IMESSAGE' ? (
+              <IMessageChatView {...commonProps} />
+            ) : chan === 'INSTAGRAM' ? (
+              <InstagramChatView {...commonProps} />
+            ) : (
+              <WhatsAppChatView {...commonProps} />
+            );
+
+            return (
+              <motion.div
+                key={selectedConv.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.15 }}
+                className="flex-1 flex flex-col h-full min-h-0 overflow-hidden"
+              >
+                {chatElement}
+              </motion.div>
+            );
           })()
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
