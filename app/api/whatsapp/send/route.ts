@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
+import { MessageService } from '@/whatsapp-engine/MessageService';
+import { getSocketIO } from '@/lib/socket-server';
+import { sessions } from '@/whatsapp-engine/engine-logic';
 
 export async function POST(req: Request) {
   try {
@@ -9,24 +12,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Tenant context is missing.' }, { status: 401 });
     }
 
-    // Forward all send params (text, media, idempotency key, etc.)
     const { to, text, mediaId, mimeType, clientMessageId, conversationId } = await req.json();
 
-    const res = await fetch('http://localhost:3001/api/whatsapp/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenantId, to, text, mediaId, mimeType, clientMessageId, conversationId }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return NextResponse.json({ error: err.error || 'Failed to send message.' }, { status: res.status });
+    if (!to || !conversationId) {
+      return NextResponse.json({ error: 'Missing recipient or conversationId.' }, { status: 400 });
     }
 
-    const data = await res.json();
-    return NextResponse.json(data);
+    if (!sessions.has(tenantId)) {
+      return NextResponse.json({ error: 'WhatsApp session is not active for this tenant.' }, { status: 400 });
+    }
+
+    const io = getSocketIO();
+    const result = await MessageService.sendMessage(
+      tenantId,
+      { to, text, mediaId, mimeType, clientMessageId, conversationId },
+      io
+    );
+
+    return NextResponse.json(result);
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Engine service offline.';
+    const msg = err instanceof Error ? err.message : 'Failed to send message.';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

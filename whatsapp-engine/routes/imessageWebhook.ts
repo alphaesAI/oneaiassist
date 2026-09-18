@@ -52,7 +52,6 @@ export function createIMessageWebhookRouter(io: any) {
           from: normalized.sender,
           id: normalized.messageId,
         },
-        io,
       });
     } catch (err: any) {
       console.error('[iMessage Webhook] Exception during webhook processing:', err?.message || err);

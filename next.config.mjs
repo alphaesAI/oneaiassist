@@ -1,9 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
   eslint: {
     // Allows production builds to successfully complete even if the project has ESLint errors.
     ignoreDuringBuilds: true,
+  },
+  experimental: {
+    serverComponentsExternalPackages: ['@open-wa/wa-automate', '@whiskeysockets/baileys', 'puppeteer-extra-plugin-devtools', 'puppeteer-extra', 'puppeteer-extra-plugin-stealth', 'clone-deep'],
+  },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push({
+        'electron': 'commonjs electron',
+        'passport': 'commonjs passport',
+        '@open-wa/wa-automate': 'commonjs @open-wa/wa-automate',
+      });
+    }
+    return config;
   },
   typescript: {
     // Allows production builds to complete even if the project has type errors.

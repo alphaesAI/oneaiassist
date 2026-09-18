@@ -108,7 +108,8 @@ export async function POST(
       }
 
       // 4. Call the WhatsApp engine to actually deliver the message
-      const engineRes = await fetch('http://localhost:3001/api/whatsapp/send', {
+      const baseUrl = process.env.WHATSAPP_ENGINE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+      const engineRes = await fetch(`${baseUrl}/api/whatsapp/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

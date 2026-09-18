@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SearchableTagSelect } from '@/components/ui/searchable-tag-select';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
-import { io } from 'socket.io-client';
+import { getClientSocket } from '@/lib/socket-client';
 
 type TemplateCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
 type TemplateStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -111,9 +111,7 @@ export default function BroadcastCenterPage() {
   useEffect(() => {
     if (!tenantId) return;
 
-    const socketInstance = io('http://localhost:3001', {
-      query: { tenantId },
-    });
+    const socketInstance = getClientSocket(tenantId);
 
     socketInstance.on('broadcast_stats_updated', (data: any) => {
       console.log('[Socket] Broadcast stats updated:', data);

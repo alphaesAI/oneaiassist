@@ -44,7 +44,8 @@ export async function POST(req: Request) {
     });
 
     // 3. Forward to whatsapp-engine webhook to broadcast and trigger bot replies
-    const engineRes = await fetch('http://localhost:3001/api/whatsapp/webchat/inbound', {
+    const baseUrl = process.env.WHATSAPP_ENGINE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+    const engineRes = await fetch(`${baseUrl}/api/whatsapp/webchat/inbound`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

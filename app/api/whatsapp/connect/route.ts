@@ -1,38 +1,56 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
+import { connectTenant, sessions, qrCodes, pairingCodes } from '@/whatsapp-engine/engine-logic';
+import { getTenantPrisma } from '@/lib/db/index';
+import { getSocketIO } from '@/lib/socket-server';
+import qrcode from 'qrcode';
 
 export async function POST(req: Request) {
+  let tenantId: string;
   try {
-    const { tenantId } = await getTenantContext();
+    const ctx = await getTenantContext();
+    tenantId = ctx.tenantId;
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized: No active session found' }, { status: 401 });
+  }
+
+  try {
     const body = await req.json().catch(() => ({}));
     const engine = body?.engine || 'BAILEYS';
     const method = body?.method || 'QR';
     const phoneNumber = body?.phoneNumber || '';
 
-    // Proxy to the standalone WhatsApp engine on port 3001
-    const engineRes = await fetch('http://localhost:3001/api/whatsapp/connect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenantId, engine, method, phoneNumber }),
-      signal: AbortSignal.timeout(5000),
+    const io = getSocketIO();
+    const db = getTenantPrisma(tenantId, 'ADMIN');
+
+    const session = await db.whatsAppNumber.findUnique({
+      where: { tenantId },
     });
 
-    if (engineRes.ok) {
-      const data = await engineRes.json();
-      return NextResponse.json(data);
+    if (session?.status === 'CONNECTED' && sessions.has(tenantId)) {
+      return NextResponse.json({ status: 'CONNECTED' });
     }
 
-    const errText = await engineRes.text().catch(() => 'Engine error');
-    return NextResponse.json({ error: errText }, { status: engineRes.status });
-  } catch (err: unknown) {
-    // Engine offline — return INITIALIZING so the UI knows to keep polling via socket
-    if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('fetch'))) {
-      return NextResponse.json({
-        status: 'ENGINE_OFFLINE',
-        message: 'WhatsApp engine (port 3001) is not reachable. Please start it with: npx tsx whatsapp-engine/server.ts',
-      }, { status: 503 });
+    // Trigger Baileys connection asynchronously in-memory
+    connectTenant(tenantId, io, phoneNumber);
+
+    if (method === 'PHONE' && phoneNumber) {
+      const code = pairingCodes.get(tenantId);
+      if (code) {
+        return NextResponse.json({ status: 'PAIRING_CODE_PENDING', pairingCode: code, engine: 'BAILEYS' });
+      }
+      return NextResponse.json({ status: 'INITIALIZING', engine: 'BAILEYS', message: 'Generating pairing code...' });
     }
-    const msg = err instanceof Error ? err.message : 'Unknown error';
+
+    const qrRaw = qrCodes.get(tenantId);
+    if (qrRaw) {
+      const qrDataUrl = qrRaw.startsWith('data:image') ? qrRaw : await qrcode.toDataURL(qrRaw);
+      return NextResponse.json({ status: 'QR_PENDING', qr: qrDataUrl, engine: 'BAILEYS' });
+    }
+
+    return NextResponse.json({ status: 'INITIALIZING', engine: 'BAILEYS', message: 'Generating QR code...' });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown connection error';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

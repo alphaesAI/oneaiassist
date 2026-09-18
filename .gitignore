@@ -34,3 +34,6 @@ next-env.d.ts
 # end managed
 
 *.tar
+/scratch/
+/stitch_oneaiassist_mobile_agency_suite/
+.~lock.*

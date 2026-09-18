@@ -116,8 +116,21 @@ export class MessageService {
       }
     }
 
-    // 4. Determine transport message type and execute
-    const transport = TransportManager.getTransport(tenantId);
+    // 4. Determine conversation channel & transport
+    let convChannel = 'WHATSAPP';
+    if (params.conversationId) {
+      try {
+        const conv = await db.conversation.findUnique({
+          where: { id: params.conversationId },
+          select: { channel: true },
+        });
+        if (conv?.channel) {
+          convChannel = conv.channel;
+        }
+      } catch {}
+    }
+
+    const transport = TransportManager.getTransport(tenantId, convChannel);
     let result: { messageId: string } = { messageId: '' };
     let messageType: 'TEXT' | 'IMAGE' | 'VIDEO' | 'OTHER' = 'TEXT';
     let sendStatus: 'SENT' | 'FAILED' = 'SENT';
@@ -168,7 +181,7 @@ export class MessageService {
         direction: 'OUTBOUND',
         senderType: 'AGENT',
         content: params.text || '',
-        channel: 'WHATSAPP',
+        channel: convChannel as any,
         channelMessageId: result.messageId || null,
         messageType,
         status: sendStatus,

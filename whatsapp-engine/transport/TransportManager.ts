@@ -2,6 +2,8 @@ import { IMessageTransport, SendResult } from './IMessageTransport';
 import { sessions, qrCodes } from '../engine-logic';
 import { openwaSessions, openwaQrCodes } from '../openwa-logic';
 import { MetaCloudTransportAdapter } from './MetaCloudTransportAdapter';
+import { IMessageCloudTransportAdapter } from './IMessageCloudTransportAdapter';
+import { InstagramCloudTransportAdapter } from './InstagramCloudTransportAdapter';
 import { getTenantPrisma } from '../../lib/db/index';
 import { jidNormalizedUser } from '@whiskeysockets/baileys';
 
@@ -176,7 +178,14 @@ export class TransportManager {
     return transport;
   }
 
-  static getTransport(tenantId: string): IMessageTransport {
+  static getTransport(tenantId: string, channel: string = 'WHATSAPP'): IMessageTransport {
+    if (channel === 'IMESSAGE' || channel === 'SMS') {
+      return new IMessageCloudTransportAdapter(tenantId);
+    }
+    if (channel === 'INSTAGRAM') {
+      return new InstagramCloudTransportAdapter(tenantId);
+    }
+
     let transport = this.instances.get(tenantId);
     if (!transport) {
       const isOpenWA = process.env.WA_ENGINE === 'OPENWA' || openwaSessions.has(tenantId);

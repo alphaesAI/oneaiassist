@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { io, Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
+import { getClientSocket } from '@/lib/socket-client';
 
 interface Message {
   id: string;
@@ -73,11 +74,8 @@ export default function WebChatWidget() {
   useEffect(() => {
     if (!tenantId || !conversationId) return;
 
-    // Connect to Standalone WhatsApp Engine Socket (port 3001)
-    const socket = io('http://localhost:3001', {
-      query: { tenantId },
-      transports: ['websocket', 'polling'],
-    });
+    // Connect to Unified WebSocket on current origin
+    const socket = getClientSocket(tenantId);
 
     socketRef.current = socket;
 
