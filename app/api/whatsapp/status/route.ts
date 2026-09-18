@@ -1,20 +1,37 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
+import { getTenantPrisma } from '@/lib/db/index';
+import { decrypt } from '@/lib/encryption';
+import { sessions } from '@/whatsapp-engine/engine-logic';
 
 export async function GET() {
   try {
     const { tenantId } = await getTenantContext();
-    
-    const res = await fetch(`http://localhost:3001/api/whatsapp/status?tenantId=${tenantId}`, {
-      cache: 'no-store',
+    const db = getTenantPrisma(tenantId, 'ADMIN');
+
+    const session = await db.whatsAppNumber.findUnique({
+      where: { tenantId },
     });
 
-    if (!res.ok) {
+    if (!session) {
       return NextResponse.json({ status: 'DISCONNECTED' });
     }
 
-    const data = await res.json();
-    return NextResponse.json(data);
+    let phone = null;
+    if (session.phoneNumber) {
+      try {
+        phone = decrypt(session.phoneNumber);
+      } catch {
+        phone = session.phoneNumber;
+      }
+    }
+
+    const isConnected = session.status === 'CONNECTED' && sessions.has(tenantId);
+
+    return NextResponse.json({
+      status: isConnected ? 'CONNECTED' : session.status,
+      phoneNumber: phone,
+    });
   } catch {
     return NextResponse.json({ status: 'DISCONNECTED' });
   }

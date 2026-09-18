@@ -93,7 +93,6 @@ export function createInstagramWebhookRouter(io: any) {
               mediaUrl: msg.mediaUrl,
               from: msg.senderIgId,
             },
-            io,
           });
         } catch (msgErr) {
           console.error(`[Instagram Webhook] Error processing message ${msg.messageId}:`, msgErr);

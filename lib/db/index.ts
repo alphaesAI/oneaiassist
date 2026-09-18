@@ -5,7 +5,7 @@ import dns from 'dns';
 
 // Ensure IPv4 is prioritized for database host resolution to prevent IPv6 ENETUNREACH/ETIMEDOUT on dual-stack environments
 const origLookup = dns.lookup;
-dns.lookup = function (hostname: any, options: any, callback: any) {
+(dns as any).lookup = function (hostname: any, options: any, callback: any) {
   if (typeof options === 'function') {
     callback = options;
     options = {};

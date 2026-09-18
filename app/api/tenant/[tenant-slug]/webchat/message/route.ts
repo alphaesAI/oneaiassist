@@ -62,9 +62,10 @@ export async function POST(
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    // 4. Trigger Webchat webhook in Baileys engine (running on port 3001) to broadcast to socket rooms
+    // 4. Trigger Webchat webhook in Baileys engine (running on unified port) to broadcast to socket rooms
     try {
-      await fetch('http://localhost:3001/api/whatsapp/webchat/inbound', {
+      const baseUrl = process.env.WHATSAPP_ENGINE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+      await fetch(`${baseUrl}/api/whatsapp/webchat/inbound`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

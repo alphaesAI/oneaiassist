@@ -62,8 +62,9 @@ export async function POST(
             },
           });
 
-          // Trigger webhook on port 3001
-          await fetch('http://localhost:3001/api/whatsapp/webchat/inbound', {
+          // Trigger webhook on unified port
+          const baseUrl = process.env.WHATSAPP_ENGINE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+          await fetch(`${baseUrl}/api/whatsapp/webchat/inbound`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

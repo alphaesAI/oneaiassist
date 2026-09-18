@@ -8,21 +8,38 @@ export async function GET() {
     const { tenantId, role } = await getTenantContext();
     const db = getTenantPrisma(tenantId, role);
 
-    const account = await db.instagramAccount.findUnique({
-      where: { tenantId },
-    });
+    try {
+      const account = await db.instagramAccount.findUnique({
+        where: { tenantId },
+      });
 
+      return NextResponse.json({
+        connected: !!account,
+        instagramId: account?.instagramId || '',
+        username: account?.username || '',
+        pageId: account?.pageId || '',
+        status: account?.status || 'DISCONNECTED',
+        createdAt: account?.createdAt || null,
+      });
+    } catch {
+      return NextResponse.json({
+        connected: false,
+        instagramId: '',
+        username: '',
+        pageId: '',
+        status: 'DISCONNECTED',
+        createdAt: null,
+      });
+    }
+  } catch {
     return NextResponse.json({
-      connected: !!account,
-      instagramId: account?.instagramId || '',
-      username: account?.username || '',
-      pageId: account?.pageId || '',
-      status: account?.status || 'DISCONNECTED',
-      createdAt: account?.createdAt || null,
+      connected: false,
+      instagramId: '',
+      username: '',
+      pageId: '',
+      status: 'DISCONNECTED',
+      createdAt: null,
     });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Unauthorized';
-    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 

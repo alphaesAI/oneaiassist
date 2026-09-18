@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { io } from 'socket.io-client';
+import { getClientSocket } from '@/lib/socket-client';
 
 interface Message {
   id: string;
@@ -99,9 +99,7 @@ function ChatWidget() {
   useEffect(() => {
     if (step !== 'CHAT' || !tenantId || !conversationId) return;
 
-    const socketInstance = io('http://localhost:3001', {
-      query: { tenantId },
-    });
+    const socketInstance = getClientSocket(tenantId);
 
     socketInstance.on('new_message', (data: { conversationId: string; message: Message }) => {
       console.log('[Widget Socket] Message event:', data);

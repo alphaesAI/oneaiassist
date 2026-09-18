@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { io, Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
+import { getClientSocket } from '@/lib/socket-client';
 import { 
   Phone, 
   QrCode, 
@@ -115,7 +116,7 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
     queryKey: ['whatsappStatus', tenantId],
     queryFn: async () => {
       if (!tenantId) throw new Error('No tenantId');
-      const res = await fetch('/api/whatsapp/status');
+      const res = await fetch(`/api/whatsapp/status?tenantId=${encodeURIComponent(tenantId)}`);
       return res.json();
     },
     enabled: !!tenantId,
@@ -232,11 +233,7 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
   useEffect(() => {
     if (!tenantId) return;
 
-    const socket = io('http://localhost:3001', {
-      query: { tenantId },
-      reconnection: true,
-      reconnectionDelay: 2000,
-    });
+    const socket = getClientSocket(tenantId);
     socketRef.current = socket;
 
     socket.on('whatsapp_qr', (data: { qr: string }) => {
@@ -279,7 +276,11 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
   // Disconnect Mutation
   const disconnectMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+      const res = await fetch('/api/whatsapp/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId }),
+      });
       if (!res.ok) throw new Error('Failed to disconnect');
       return res.json();
     },

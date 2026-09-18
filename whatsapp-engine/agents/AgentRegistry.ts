@@ -29,7 +29,7 @@ export class AgentRegistry {
    * Finds the best agent capable of handling the current context
    */
   static async resolveAgent(context: AgentContext): Promise<IInsuranceAgent | null> {
-    for (const agent of this.agents.values()) {
+    for (const agent of Array.from(this.agents.values())) {
       if (await agent.canHandle(context)) {
         return agent;
       }

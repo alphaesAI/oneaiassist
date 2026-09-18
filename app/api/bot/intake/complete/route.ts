@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma, getTenantPrisma } from '@/lib/db';
+import { getSocketIO } from '@/lib/socket-server';
 
 export async function POST(req: Request) {
   try {
@@ -155,19 +156,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    // Trigger Socket.io real-time broadcast on port 3001
+    // Trigger Socket.io real-time broadcast
     try {
-      await fetch('http://localhost:3001/api/whatsapp/emit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenantId,
-          event: 'lead_status_updated',
-          data: {
-            leadId,
-            status: 'QUALIFIED',
-          },
-        }),
+      const io = getSocketIO();
+      io?.to(`tenant_${tenantId}`).emit('lead_status_updated', {
+        leadId,
+        status: 'QUALIFIED',
       });
       console.log(`[Handoff API] Broadcasted lead_status_updated for lead ${leadId}`);
     } catch (socketErr) {

@@ -33,8 +33,8 @@ async function checkDatabase() {
 
 async function checkWhatsAppEngine() {
   try {
-    // Ping standalone whatsapp-engine on port 3001
-    const res = await fetch('http://localhost:3001/api/whatsapp/status?tenantId=health-check', {
+    const baseUrl = process.env.WHATSAPP_ENGINE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+    const res = await fetch(`${baseUrl}/api/whatsapp/status?tenantId=health-check`, {
       method: 'GET',
       next: { revalidate: 0 },
       signal: AbortSignal.timeout(1200),

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
-import { io } from 'socket.io-client';
+import { getClientSocket } from '@/lib/socket-client';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -201,9 +201,7 @@ export default function InboxPage() {
   useEffect(() => {
     if (!tenantId) return;
 
-    const socketInstance = io('http://localhost:3001', {
-      query: { tenantId },
-    });
+    const socketInstance = getClientSocket(tenantId);
 
     socketInstance.on('new_message', (data: { conversationId: string; message: Message }) => {
       console.log('[Socket] New message event received:', data);

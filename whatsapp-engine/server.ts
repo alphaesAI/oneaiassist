@@ -283,10 +283,15 @@ app.post('/api/whatsapp/webchat/inbound', async (req, res) => {
     });
 
     if (config?.isActive) {
+      const conversation = await db.conversation.findUnique({
+        where: { id: conversationId },
+        include: { customer: true },
+      });
+
       const enqueueRes = await enqueueInboundJob({
         tenantId,
         wamId: messageId,
-        senderPhone: conversation.customer?.primaryPhone || 'webchat_user',
+        senderPhone: conversation?.customer?.primaryPhone || 'webchat_user',
         payload: { text, from: 'webchat_user' },
       });
 

@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { io } from 'socket.io-client';
+import { getClientSocket } from '@/lib/socket-client';
 
 interface Lead {
   id: string;
@@ -56,9 +56,7 @@ export default function LeadsPage() {
   useEffect(() => {
     if (!tenantId) return;
 
-    const socketInstance = io('http://localhost:3001', {
-      query: { tenantId },
-    });
+    const socketInstance = getClientSocket(tenantId);
 
     socketInstance.on('lead_status_updated', (data: { leadId: string; status: string }) => {
       console.log('[Socket] lead_status_updated event received:', data);
