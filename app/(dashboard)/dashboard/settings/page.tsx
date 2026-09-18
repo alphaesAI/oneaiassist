@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
 import { 
   SlidersHorizontal,
@@ -133,14 +134,24 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      {/* Tab Contents */}
+      {/* Tab Contents with Smooth Crossfades */}
       <div className="pt-2">
-        {activeTab === 'channels' && <SettingsChannelsTab tenantId={tenantId} />}
-        {activeTab === 'workspace' && <SettingsWorkspaceTab tenantId={tenantId} />}
-        {activeTab === 'ai' && <SettingsAiTab />}
-        {activeTab === 'developer' && <SettingsDeveloperTab />}
-        {activeTab === 'account' && <SettingsAccountTab />}
-        {activeTab === 'compliance' && <SettingsComplianceTab />}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {activeTab === 'channels' && <SettingsChannelsTab tenantId={tenantId} />}
+            {activeTab === 'workspace' && <SettingsWorkspaceTab tenantId={tenantId} />}
+            {activeTab === 'ai' && <SettingsAiTab />}
+            {activeTab === 'developer' && <SettingsDeveloperTab />}
+            {activeTab === 'account' && <SettingsAccountTab />}
+            {activeTab === 'compliance' && <SettingsComplianceTab />}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -573,14 +573,25 @@ export default function InboxPage() {
               needsEscalation: selectedConv.needsEscalation,
             };
 
-            if (chan === 'IMESSAGE') {
-              return <IMessageChatView {...commonProps} />;
-            }
-            if (chan === 'INSTAGRAM') {
-              return <InstagramChatView {...commonProps} />;
-            }
-            // Default to authentic WhatsApp Web interface
-            return <WhatsAppChatView {...commonProps} />;
+            const chatElement = chan === 'IMESSAGE' ? (
+              <IMessageChatView {...commonProps} />
+            ) : chan === 'INSTAGRAM' ? (
+              <InstagramChatView {...commonProps} />
+            ) : (
+              <WhatsAppChatView {...commonProps} />
+            );
+
+            return (
+              <motion.div
+                key={selectedConv.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.15 }}
+                className="flex-1 flex flex-col h-full min-h-0 overflow-hidden"
+              >
+                {chatElement}
+              </motion.div>
+            );
           })()
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">

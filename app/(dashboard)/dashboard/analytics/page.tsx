@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
 
@@ -272,9 +273,17 @@ export default function AnalyticsDashboardPage() {
           <button onClick={() => refetch()} className="ml-2 text-[#004ac6] underline font-semibold">Retry</button>
         </div>
       ) : (
-        <>
-          {/* TAB 1: OVERVIEW */}
-          {activeTab === 'overview' && (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full"
+          >
+            {/* TAB 1: OVERVIEW */}
+            {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -651,7 +660,8 @@ export default function AnalyticsDashboardPage() {
               </div>
             </div>
           )}
-        </>
+          </motion.div>
+        </AnimatePresence>
       )}
 
       {/* Email Report Modal */}

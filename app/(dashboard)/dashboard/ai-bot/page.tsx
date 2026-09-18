@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 
 import BotIdentityTab from '@/components/bot-identity-tab';
@@ -246,18 +247,27 @@ export default function AiBotPage() {
         })}
       </div>
 
-      {/* Tab Contents */}
-      {activeTab === 'identity' && <BotIdentityTab />}
-      {activeTab === 'knowledge' && <BotKnowledgeRagTab />}
-      {activeTab === 'escalation' && <BotEscalationTab />}
-      {activeTab === 'guardrails' && <BotGuardrailsTab />}
-      {activeTab === 'catalog' && <BotCatalogTab />}
-      {activeTab === 'sandbox' && <BotSandboxTab />}
-      {activeTab === 'history' && <BotHistoryTab />}
+      {/* Tab Contents with Smooth Crossfades */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full"
+        >
+          {activeTab === 'identity' && <BotIdentityTab />}
+          {activeTab === 'knowledge' && <BotKnowledgeRagTab />}
+          {activeTab === 'escalation' && <BotEscalationTab />}
+          {activeTab === 'guardrails' && <BotGuardrailsTab />}
+          {activeTab === 'catalog' && <BotCatalogTab />}
+          {activeTab === 'sandbox' && <BotSandboxTab />}
+          {activeTab === 'history' && <BotHistoryTab />}
 
-      {/* Tab 2: Intake Flowchart Builder Canvas */}
-      {activeTab === 'intake' && (
-        <div className="space-y-6">
+          {/* Tab 2: Intake Flowchart Builder Canvas */}
+          {activeTab === 'intake' && (
+            <div className="space-y-6">
           <div className="bg-white border border-[#c3c6d7] rounded-2xl p-6 shadow-sm flex items-center justify-between">
             <div>
               <h3 className="text-base font-bold text-[#1B4B91] flex items-center gap-2">
@@ -429,6 +439,8 @@ export default function AiBotPage() {
           </div>
         </div>
       )}
+        </motion.div>
+      </AnimatePresence>
 
       {/* WhatsApp Customer Simulator Drawer */}
       {showSimulator && (
