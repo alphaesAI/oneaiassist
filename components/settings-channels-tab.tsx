@@ -33,6 +33,22 @@ function InstagramIcon({ className = "w-5 h-5" }: { className?: string }) {
   );
 }
 
+function FacebookIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+    </svg>
+  );
+}
+
+function LinkedinIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+    </svg>
+  );
+}
+
 type ConnectMethod = 'QR' | 'PHONE';
 type EngineType = 'BAILEYS' | 'OPENWA';
 
@@ -70,6 +86,27 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
   const [igAccessToken, setIgAccessToken] = useState('');
   const [igSaveSuccess, setIgSaveSuccess] = useState(false);
   const [igError, setIgError] = useState('');
+  const [igTestFeedback, setIgTestFeedback] = useState<{ valid: boolean; account?: any; error?: string } | null>(null);
+  const [showManualIg, setShowManualIg] = useState(false);
+
+  // Facebook Channel States
+  const [fbPageId, setFbPageId] = useState('');
+  const [fbPageName, setFbPageName] = useState('');
+  const [fbAccessToken, setFbAccessToken] = useState('');
+  const [fbSaveSuccess, setFbSaveSuccess] = useState(false);
+  const [fbError, setFbError] = useState('');
+  const [fbTestFeedback, setFbTestFeedback] = useState<{ valid: boolean; page?: any; error?: string } | null>(null);
+  const [showManualFb, setShowManualFb] = useState(false);
+
+  // LinkedIn Channel States
+  const [liAuthorUrn, setLiAuthorUrn] = useState('');
+  const [liAccountName, setLiAccountName] = useState('');
+  const [liAccessToken, setLiAccessToken] = useState('');
+  const [liAuthorType, setLiAuthorType] = useState<'ORGANIZATION' | 'PERSON'>('ORGANIZATION');
+  const [liSaveSuccess, setLiSaveSuccess] = useState(false);
+  const [liError, setLiError] = useState('');
+  const [liTestFeedback, setLiTestFeedback] = useState<{ valid: boolean; profile?: any; error?: string } | null>(null);
+  const [showManualLi, setShowManualLi] = useState(false);
 
   // Email Channel States
   const [emailProvider, setEmailProvider] = useState<'RESEND' | 'SES' | 'SENDGRID' | 'SMTP'>('RESEND');
@@ -356,6 +393,22 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
     },
   });
 
+  const testIgMutation = useMutation({
+    mutationFn: async () => {
+      setIgTestFeedback(null);
+      setIgError('');
+      const res = await fetch('/api/channels/instagram/verify');
+      const data = await res.json();
+      return data;
+    },
+    onSuccess: (data) => {
+      setIgTestFeedback(data);
+    },
+    onError: (err: any) => {
+      setIgTestFeedback({ valid: false, error: err.message || 'Verification failed' });
+    },
+  });
+
   const disconnectIgMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch('/api/channels/instagram', { method: 'DELETE' });
@@ -369,6 +422,247 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
       setIgPageId('');
       setIgAccessToken('');
       queryClient.invalidateQueries({ queryKey: ['instagramStatus', tenantId] });
+    },
+  });
+
+  // Facebook Queries & Mutations
+  const { data: fbStatus, refetch: refetchFbStatus } = useQuery<{
+    connected: boolean;
+    pageId?: string;
+    pageName?: string;
+    status: string;
+    inheritedFromInstagram?: boolean;
+  }>({
+    queryKey: ['facebookStatus', tenantId],
+    queryFn: async () => {
+      const res = await fetch('/api/channels/facebook');
+      return res.json();
+    },
+    enabled: !!tenantId,
+  });
+
+  useEffect(() => {
+    if (fbStatus?.connected) {
+      if (fbStatus.pageId) setFbPageId(fbStatus.pageId);
+      if (fbStatus.pageName) setFbPageName(fbStatus.pageName);
+    }
+  }, [fbStatus]);
+
+  const handleFacebookOAuthLogin = () => {
+    setFbError('');
+    const width = 600;
+    const height = 700;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+    window.open(
+      '/api/auth/facebook',
+      'MetaAuthPopup',
+      `width=${width},height=${height},top=${top},left=${left}`
+    );
+  };
+
+  const handleInstagramOAuthLogin = () => {
+    setIgError('');
+    const width = 600;
+    const height = 700;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+    window.open(
+      '/api/auth/instagram',
+      'InstagramAuthPopup',
+      `width=${width},height=${height},top=${top},left=${left}`
+    );
+  };
+
+  const handleLinkedInOAuthLogin = () => {
+    setLiError('');
+    const width = 600;
+    const height = 700;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+    window.open(
+      '/api/auth/linkedin',
+      'LinkedInAuthPopup',
+      `width=${width},height=${height},top=${top},left=${left}`
+    );
+  };
+
+
+  const saveFbMutation = useMutation({
+    mutationFn: async () => {
+      setFbError('');
+      const res = await fetch('/api/channels/facebook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pageId: fbPageId,
+          pageName: fbPageName,
+          pageAccessToken: fbAccessToken,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save Facebook credentials');
+      return data;
+    },
+    onSuccess: () => {
+      setFbSaveSuccess(true);
+      refetchFbStatus();
+      queryClient.invalidateQueries({ queryKey: ['facebookStatus', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['marketing-integrations'] });
+      setTimeout(() => setFbSaveSuccess(false), 4000);
+    },
+    onError: (err: any) => {
+      setFbError(err.message || 'Error saving Facebook credentials');
+    },
+  });
+
+  const testFbMutation = useMutation({
+    mutationFn: async () => {
+      setFbTestFeedback(null);
+      setFbError('');
+      const res = await fetch('/api/channels/facebook/verify');
+      const data = await res.json();
+      return data;
+    },
+    onSuccess: (data) => {
+      setFbTestFeedback(data);
+    },
+    onError: (err: any) => {
+      setFbTestFeedback({ valid: false, error: err.message || 'Verification failed' });
+    },
+  });
+
+  const disconnectFbMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/channels/facebook', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to disconnect Facebook');
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchFbStatus();
+      setFbPageId('');
+      setFbPageName('');
+      setFbAccessToken('');
+      queryClient.invalidateQueries({ queryKey: ['facebookStatus', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['marketing-integrations'] });
+    },
+  });
+
+  // LinkedIn Queries & Mutations
+  const { data: liStatus, refetch: refetchLiStatus } = useQuery<{
+    connected: boolean;
+    authorUrn?: string;
+    accountName?: string;
+    authorType?: 'ORGANIZATION' | 'PERSON';
+    status: string;
+  }>({
+    queryKey: ['linkedinStatus', tenantId],
+    queryFn: async () => {
+      const res = await fetch('/api/channels/linkedin');
+      return res.json();
+    },
+    enabled: !!tenantId,
+  });
+
+  useEffect(() => {
+    if (liStatus?.connected) {
+      if (liStatus.authorUrn) setLiAuthorUrn(liStatus.authorUrn);
+      if (liStatus.accountName) setLiAccountName(liStatus.accountName);
+      if (liStatus.authorType) setLiAuthorType(liStatus.authorType);
+    }
+  }, [liStatus]);
+
+  useEffect(() => {
+    const handleOAuthMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'META_AUTH_SUCCESS') {
+        setFbSaveSuccess(true);
+        if (event.data.hasInstagram) {
+          setIgSaveSuccess(true);
+          setTimeout(() => setIgSaveSuccess(false), 5000);
+        }
+        refetchFbStatus();
+        refetchIgStatus();
+        queryClient.invalidateQueries({ queryKey: ['facebookStatus', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ['instagramStatus', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ['marketing-integrations'] });
+        setTimeout(() => setFbSaveSuccess(false), 5000);
+      } else if (event.data?.type === 'META_AUTH_ERROR') {
+        setFbError(event.data.error || 'Meta authentication was cancelled or failed.');
+        setIgError(event.data.error || 'Meta authentication was cancelled or failed.');
+      } else if (event.data?.type === 'LINKEDIN_AUTH_SUCCESS') {
+        setLiSaveSuccess(true);
+        if (event.data.authorUrn) setLiAuthorUrn(event.data.authorUrn);
+        refetchLiStatus();
+        queryClient.invalidateQueries({ queryKey: ['linkedinStatus', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ['marketing-integrations'] });
+        setTimeout(() => setLiSaveSuccess(false), 5000);
+      } else if (event.data?.type === 'LINKEDIN_AUTH_ERROR') {
+        setLiError(event.data.error || 'LinkedIn authentication was cancelled or failed.');
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
+    return () => window.removeEventListener('message', handleOAuthMessage);
+  }, [tenantId, refetchFbStatus, refetchIgStatus, refetchLiStatus, queryClient]);
+
+  const saveLiMutation = useMutation({
+    mutationFn: async () => {
+      setLiError('');
+      const res = await fetch('/api/channels/linkedin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          authorUrn: liAuthorUrn,
+          accountName: liAccountName,
+          accessToken: liAccessToken,
+          authorType: liAuthorType,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save LinkedIn credentials');
+      return data;
+    },
+    onSuccess: () => {
+      setLiSaveSuccess(true);
+      refetchLiStatus();
+      queryClient.invalidateQueries({ queryKey: ['linkedinStatus', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['marketing-integrations'] });
+      setTimeout(() => setLiSaveSuccess(false), 4000);
+    },
+    onError: (err: any) => {
+      setLiError(err.message || 'Error saving LinkedIn credentials');
+    },
+  });
+
+  const testLiMutation = useMutation({
+    mutationFn: async () => {
+      setLiTestFeedback(null);
+      setLiError('');
+      const res = await fetch('/api/channels/linkedin/verify');
+      const data = await res.json();
+      return data;
+    },
+    onSuccess: (data) => {
+      setLiTestFeedback(data);
+    },
+    onError: (err: any) => {
+      setLiTestFeedback({ valid: false, error: err.message || 'Verification failed' });
+    },
+  });
+
+  const disconnectLiMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/channels/linkedin', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to disconnect LinkedIn');
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchLiStatus();
+      setLiAuthorUrn('');
+      setLiAccountName('');
+      setLiAccessToken('');
+      queryClient.invalidateQueries({ queryKey: ['linkedinStatus', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['marketing-integrations'] });
     },
   });
 
@@ -842,89 +1136,588 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
           )}
         </div>
 
-        {/* Credentials Form */}
-        <div className="space-y-4 pt-2 border-t border-gray-100">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Instagram Business Account ID <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={igId}
-                onChange={(e) => setIgId(e.target.value)}
-                placeholder="e.g. 17841400000000000"
-                className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Instagram Handle / Username
-              </label>
-              <input
-                type="text"
-                value={igUsername}
-                onChange={(e) => setIgUsername(e.target.value)}
-                placeholder="e.g. @your_agency_official"
-                className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Connected Facebook Page ID
-              </label>
-              <input
-                type="text"
-                value={igPageId}
-                onChange={(e) => setIgPageId(e.target.value)}
-                placeholder="e.g. 102938475610293"
-                className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Page Access Token (Encrypted AES-256) <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={igAccessToken}
-                onChange={(e) => setIgAccessToken(e.target.value)}
-                placeholder={igStatus?.connected ? "••••••••••••••••••••••••" : "EAAB..."}
-                className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
-              />
-            </div>
-          </div>
-
-          <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-[11px] text-amber-900 space-y-1">
-            <p className="font-bold flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-              Meta Platform Policy & In-App Requirement:
-            </p>
-            <p>
-              1. Inside your Instagram mobile app: <strong>Settings & Privacy ➔ Messages & Story Replies ➔ Message Controls ➔ Connected Tools ➔ Toggle ON "Allow Access to Messages"</strong>.
-            </p>
-            <p>
-              2. Outbound AI responses are strictly permitted within <strong>24 hours</strong> of the customer&apos;s last DM.
+        {/* 1-Click Instagram OAuth 2.0 Connection Banner */}
+        <div className="bg-gradient-to-r from-pink-50/90 via-purple-50/90 to-amber-50/90 border border-pink-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+          <div className="space-y-0.5 text-center sm:text-left">
+            <h5 className="text-xs font-bold text-purple-950 flex items-center justify-center sm:justify-start gap-1.5">
+              <Sparkles className="w-4 h-4 text-pink-600" />
+              Recommended: 1-Click Instagram OAuth 2.0 Login
+            </h5>
+            <p className="text-[11px] text-purple-900 leading-relaxed">
+              Login securely via Meta, approve on your phone, and OneAIAssist automatically acquires your Instagram Business Account ID and Page Token. Zero manual keys required.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={handleInstagramOAuthLogin}
+            className="px-5 py-2.5 bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 whitespace-nowrap active:scale-95"
+          >
+            <InstagramIcon className="w-4 h-4 text-white" />
+            <span>Connect with Instagram</span>
+          </button>
+        </div>
 
-          {igError && <p className="text-xs text-rose-600 font-semibold">{igError}</p>}
-          {igSaveSuccess && (
-            <p className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 font-bold">
-              ✓ Instagram credentials securely saved and encrypted! Inbound DMs are now active.
-            </p>
+        {/* Feedback Messages */}
+        {igError && (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{igError}</span>
+          </div>
+        )}
+        {igSaveSuccess && (
+          <p className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 font-bold">
+            ✓ Instagram Professional Account successfully connected! AI DM Gateway and Reels Publishing are active.
+          </p>
+        )}
+
+        {/* Collapsible Manual Credentials Form */}
+        <div className="border-t border-gray-100 pt-3">
+          <button
+            type="button"
+            onClick={() => setShowManualIg(!showManualIg)}
+            className="text-xs font-bold text-gray-600 hover:text-gray-900 flex items-center justify-between w-full py-1 transition"
+          >
+            <span className="flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-gray-500" />
+              Advanced: Enter Instagram Account ID & Token Manually
+            </span>
+            <span className="text-[11px] text-[#004ac6] font-semibold">
+              {showManualIg ? 'Hide Manual Options ▲' : 'Show Manual Options ▼'}
+            </span>
+          </button>
+
+          {showManualIg && (
+            <div className="space-y-4 pt-3 mt-2 border-t border-gray-100">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Instagram Business Account ID <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={igId}
+                    onChange={(e) => setIgId(e.target.value)}
+                    placeholder="e.g. 17841400000000000"
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Instagram Handle / Username
+                  </label>
+                  <input
+                    type="text"
+                    value={igUsername}
+                    onChange={(e) => setIgUsername(e.target.value)}
+                    placeholder="e.g. @your_agency_official"
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Connected Facebook Page ID
+                  </label>
+                  <input
+                    type="text"
+                    value={igPageId}
+                    onChange={(e) => setIgPageId(e.target.value)}
+                    placeholder="e.g. 102938475610293"
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Page Access Token (Encrypted AES-256) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={igAccessToken}
+                    onChange={(e) => setIgAccessToken(e.target.value)}
+                    placeholder={igStatus?.connected ? "••••••••••••••••••••••••" : "EAAB..."}
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-[11px] text-amber-900 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                  Meta Platform Policy & In-App Requirement:
+                </p>
+                <p>
+                  1. Inside your Instagram mobile app: <strong>Settings & Privacy ➔ Messages & Story Replies ➔ Message Controls ➔ Connected Tools ➔ Toggle ON &quot;Allow Access to Messages&quot;</strong>.
+                </p>
+                <p>
+                  2. Outbound AI responses are strictly permitted within <strong>24 hours</strong> of the customer&apos;s last DM.
+                </p>
+              </div>
+
+              {/* Meta Graph API Test Feedback */}
+              {igTestFeedback && (
+                <div className={`p-3 rounded-xl border text-xs font-semibold ${
+                  igTestFeedback.valid
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-rose-50 text-rose-800 border-rose-200'
+                }`}>
+                  {igTestFeedback.valid ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        Meta Connection Verified! Account: <strong>@{igTestFeedback.account?.username}</strong> ({igTestFeedback.account?.name || 'Verified'}) • Permissions Active for Reels & Publishing
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <span>Meta API Error: {igTestFeedback.error}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => testIgMutation.mutate()}
+                  disabled={testIgMutation.isPending || (!igStatus?.connected && !igId)}
+                  className="px-4 py-2 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-bold text-xs rounded-xl shadow-sm transition flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${testIgMutation.isPending ? 'animate-spin' : ''}`} />
+                  {testIgMutation.isPending ? 'Verifying with Meta...' : 'Test Meta Connection'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => saveIgMutation.mutate()}
+                  disabled={saveIgMutation.isPending || !igId || (!igAccessToken && !igStatus?.connected)}
+                  className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700 text-white font-bold text-xs rounded-xl shadow-sm transition disabled:opacity-50"
+                >
+                  {saveIgMutation.isPending ? 'Connecting...' : 'Save & Connect Instagram'}
+                </button>
+              </div>
+            </div>
           )}
+        </div>
+      </div>
 
-          <div className="flex justify-end pt-2">
+      {/* Facebook Page Integration Card */}
+      <div className="bg-white border border-[#c3c6d7] rounded-2xl p-6 shadow-sm space-y-6">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-[#1877F2]">
+              <FacebookIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-base font-bold text-[#1c1b1f]">Facebook Page Integration</h4>
+                {fbStatus?.connected ? (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    Connected {fbStatus.pageName ? `(${fbStatus.pageName})` : ''}
+                    {fbStatus.inheritedFromInstagram && ' • Via Instagram'}
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200">
+                    Not Connected
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#49454f] mt-0.5">
+                Publish feed posts, healthcare announcements, photos, and video campaigns directly to your official Facebook Page.
+              </p>
+            </div>
+          </div>
+          {fbStatus?.connected && !fbStatus.inheritedFromInstagram && (
             <button
               type="button"
-              onClick={() => saveIgMutation.mutate()}
-              disabled={saveIgMutation.isPending || !igId || (!igAccessToken && !igStatus?.connected)}
-              className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700 text-white font-bold text-xs rounded-xl shadow-sm transition disabled:opacity-50"
+              onClick={() => disconnectFbMutation.mutate()}
+              disabled={disconnectFbMutation.isPending}
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 border border-rose-200 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition"
             >
-              {saveIgMutation.isPending ? 'Connecting...' : 'Save & Connect Instagram'}
+              {disconnectFbMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
             </button>
+          )}
+        </div>
+
+        {/* 1-Click OAuth 2.0 Connection Banner */}
+        <div className="bg-gradient-to-r from-blue-50/90 to-indigo-50/90 border border-blue-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+          <div className="space-y-0.5 text-center sm:text-left">
+            <h5 className="text-xs font-bold text-blue-950 flex items-center justify-center sm:justify-start gap-1.5">
+              <Sparkles className="w-4 h-4 text-blue-600" />
+              Recommended: 1-Click Facebook OAuth 2.0 Login
+            </h5>
+            <p className="text-[11px] text-blue-800 leading-relaxed">
+              Login securely on Facebook, approve on your phone via 2FA, and OneAIAssist automatically acquires a never-expiring Page token. Zero password sharing required.
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={handleFacebookOAuthLogin}
+            className="px-5 py-2.5 bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 whitespace-nowrap active:scale-95"
+          >
+            <FacebookIcon className="w-4 h-4 text-white" />
+            <span>Connect with Facebook</span>
+          </button>
+        </div>
+
+        {/* Feedback Messages */}
+        {fbError && (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{fbError}</span>
+          </div>
+        )}
+        {fbSaveSuccess && (
+          <p className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 font-bold">
+            ✓ Facebook Page successfully connected and encrypted! Publishing pipeline is active.
+          </p>
+        )}
+
+        {/* Collapsible Manual Credentials Form */}
+        <div className="border-t border-gray-100 pt-3">
+          <button
+            type="button"
+            onClick={() => setShowManualFb(!showManualFb)}
+            className="text-xs font-bold text-gray-600 hover:text-gray-900 flex items-center justify-between w-full py-1 transition"
+          >
+            <span className="flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-gray-500" />
+              Advanced: Enter Page ID & Access Token Manually
+            </span>
+            <span className="text-[11px] text-[#004ac6] font-semibold">
+              {showManualFb ? 'Hide Manual Options ▲' : 'Show Manual Options ▼'}
+            </span>
+          </button>
+
+          {showManualFb && (
+            <div className="space-y-4 pt-3 mt-2 border-t border-gray-100">
+              {igPageId && !fbPageId && (
+                <div className="flex items-center justify-between p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs text-blue-900">
+                  <span>Detected Facebook Page ID linked to your Instagram: <strong>{igPageId}</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFbPageId(igPageId);
+                      if (igAccessToken) setFbAccessToken(igAccessToken);
+                      if (igUsername) setFbPageName(`${igUsername} Page`);
+                    }}
+                    className="px-3 py-1 bg-white hover:bg-blue-50 border border-blue-300 font-bold text-[11px] rounded-lg transition"
+                  >
+                    Auto-Fill from Instagram
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Facebook Page ID <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={fbPageId}
+                    onChange={(e) => setFbPageId(e.target.value)}
+                    placeholder="e.g. 102938475610293"
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Facebook Page Name / Brand
+                  </label>
+                  <input
+                    type="text"
+                    value={fbPageName}
+                    onChange={(e) => setFbPageName(e.target.value)}
+                    placeholder="e.g. Prime Health Experts Official"
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Page Access Token (Encrypted AES-256) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={fbAccessToken}
+                    onChange={(e) => setFbAccessToken(e.target.value)}
+                    placeholder={fbStatus?.connected ? "••••••••••••••••••••••••" : "EAAB..."}
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3 text-[11px] text-blue-900 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-700" />
+                  Meta App Scopes & Token Requirements:
+                </p>
+                <p>
+                  Requires <strong>pages_manage_posts</strong> and <strong>pages_read_engagement</strong> permissions. Generate a permanent Page Access Token from Meta Business Suite / Graph API Explorer for automated campaign distribution.
+                </p>
+              </div>
+
+              {/* Meta Graph API Test Feedback */}
+              {fbTestFeedback && (
+                <div className={`p-3 rounded-xl border text-xs font-semibold ${
+                  fbTestFeedback.valid
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-rose-50 text-rose-800 border-rose-200'
+                }`}>
+                  {fbTestFeedback.valid ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        Meta Connection Verified! Page: <strong>{fbTestFeedback.page?.name}</strong> (Category: {fbTestFeedback.page?.category || 'General'}) • Followers: {fbTestFeedback.page?.fanCount ?? 'Active'} • Ready for Publishing
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <span>Meta API Error: {fbTestFeedback.error}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => testFbMutation.mutate()}
+                  disabled={testFbMutation.isPending || (!fbStatus?.connected && !fbPageId)}
+                  className="px-4 py-2 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-bold text-xs rounded-xl shadow-sm transition flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${testFbMutation.isPending ? 'animate-spin' : ''}`} />
+                  {testFbMutation.isPending ? 'Verifying with Meta...' : 'Test Meta Connection'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => saveFbMutation.mutate()}
+                  disabled={saveFbMutation.isPending || !fbPageId || (!fbAccessToken && !fbStatus?.connected)}
+                  className="px-5 py-2.5 bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs rounded-xl shadow-sm transition disabled:opacity-50"
+                >
+                  {saveFbMutation.isPending ? 'Connecting...' : 'Save & Connect Facebook'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+
+      {/* LinkedIn Company / Member Integration Card */}
+      <div className="bg-white border border-[#c3c6d7] rounded-2xl p-6 shadow-sm space-y-6">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-[#0A66C2]">
+              <LinkedinIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-base font-bold text-[#1c1b1f]">LinkedIn Company & Profile Integration</h4>
+                {liStatus?.connected ? (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    Connected {liStatus.accountName ? `(${liStatus.accountName})` : ''}
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200">
+                    Not Connected
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#49454f] mt-0.5">
+                Publish thought leadership posts, promotional announcements, and media updates directly to your LinkedIn Company Page or Personal Profile.
+              </p>
+            </div>
+          </div>
+          {liStatus?.connected && (
+            <button
+              type="button"
+              onClick={() => disconnectLiMutation.mutate()}
+              disabled={disconnectLiMutation.isPending}
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 border border-rose-200 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition"
+            >
+              {disconnectLiMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
+            </button>
+          )}
+        </div>
+
+        {/* 1-Click LinkedIn OAuth 2.0 Connection Banner */}
+        <div className="bg-gradient-to-r from-blue-50/90 to-sky-50/90 border border-blue-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+          <div className="space-y-0.5 text-center sm:text-left">
+            <h5 className="text-xs font-bold text-[#0A66C2] flex items-center justify-center sm:justify-start gap-1.5">
+              <Sparkles className="w-4 h-4 text-[#0A66C2]" />
+              Recommended: 1-Click LinkedIn OAuth 2.0 Login
+            </h5>
+            <p className="text-[11px] text-blue-900 leading-relaxed">
+              Login securely on LinkedIn, approve in 1-click, and OneAIAssist automatically acquires your Member URN and 60-day OAuth token. Zero manual setup needed.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleLinkedInOAuthLogin}
+            className="px-5 py-2.5 bg-[#0A66C2] hover:bg-[#004182] text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 whitespace-nowrap active:scale-95"
+          >
+            <LinkedinIcon className="w-4 h-4 text-white" />
+            <span>Connect with LinkedIn</span>
+          </button>
+        </div>
+
+        {/* Feedback Messages */}
+        {liError && (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{liError}</span>
+          </div>
+        )}
+        {liSaveSuccess && (
+          <p className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 font-bold">
+            ✓ LinkedIn Profile / Company Page successfully connected! UGC Marketing Publisher is active.
+          </p>
+        )}
+
+        {/* Collapsible Manual Credentials Form */}
+        <div className="border-t border-gray-100 pt-3">
+          <button
+            type="button"
+            onClick={() => setShowManualLi(!showManualLi)}
+            className="text-xs font-bold text-gray-600 hover:text-gray-900 flex items-center justify-between w-full py-1 transition"
+          >
+            <span className="flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-gray-500" />
+              Advanced: Enter Member/Organization URN & Token Manually
+            </span>
+            <span className="text-[11px] text-[#004ac6] font-semibold">
+              {showManualLi ? 'Hide Manual Options ▲' : 'Show Manual Options ▼'}
+            </span>
+          </button>
+
+          {showManualLi && (
+            <div className="space-y-4 pt-3 mt-2 border-t border-gray-100">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">Posting As (Author Type)</label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-gray-800 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="liAuthorType"
+                      value="ORGANIZATION"
+                      checked={liAuthorType === 'ORGANIZATION'}
+                      onChange={() => setLiAuthorType('ORGANIZATION')}
+                      className="text-[#0A66C2] focus:ring-[#0A66C2]"
+                    />
+                    Company / Organization Page
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-gray-800 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="liAuthorType"
+                      value="PERSON"
+                      checked={liAuthorType === 'PERSON'}
+                      onChange={() => setLiAuthorType('PERSON')}
+                      className="text-[#0A66C2] focus:ring-[#0A66C2]"
+                    />
+                    Personal Profile / Member
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    {liAuthorType === 'ORGANIZATION' ? 'LinkedIn Organization ID or URN' : 'LinkedIn Member URN / ID'} <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={liAuthorUrn}
+                    onChange={(e) => setLiAuthorUrn(e.target.value)}
+                    placeholder={liAuthorType === 'ORGANIZATION' ? 'e.g. 98765432 or urn:li:organization:98765432' : 'e.g. urn:li:person:abcdef123'}
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Display / Company Name
+                  </label>
+                  <input
+                    type="text"
+                    value={liAccountName}
+                    onChange={(e) => setLiAccountName(e.target.value)}
+                    placeholder="e.g. Prime Marketing Experts Company"
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    OAuth 2.0 Access Token (Encrypted AES-256) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={liAccessToken}
+                    onChange={(e) => setLiAccessToken(e.target.value)}
+                    placeholder={liStatus?.connected ? "••••••••••••••••••••••••" : "AQV..."}
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6] focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3 text-[11px] text-blue-900 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-700" />
+                  Required LinkedIn OAuth 2.0 Scopes:
+                </p>
+                <p>
+                  For Organization Pages: <strong>w_organization_social</strong> and <strong>r_organization_social</strong>. For Personal Profiles: <strong>w_member_social</strong> and <strong>openid, profile, email</strong>.
+                </p>
+              </div>
+
+              {/* LinkedIn API Test Feedback */}
+              {liTestFeedback && (
+                <div className={`p-3 rounded-xl border text-xs font-semibold ${
+                  liTestFeedback.valid
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-rose-50 text-rose-800 border-rose-200'
+                }`}>
+                  {liTestFeedback.valid ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        LinkedIn Connection Verified! Name: <strong>{liTestFeedback.profile?.name}</strong> {liTestFeedback.profile?.email ? `(${liTestFeedback.profile.email})` : ''} • Ready for Campaign Publishing
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <span>LinkedIn API Error: {liTestFeedback.error}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => testLiMutation.mutate()}
+                  disabled={testLiMutation.isPending || (!liStatus?.connected && !liAuthorUrn)}
+                  className="px-4 py-2 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-bold text-xs rounded-xl shadow-sm transition flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${testLiMutation.isPending ? 'animate-spin' : ''}`} />
+                  {testLiMutation.isPending ? 'Verifying with LinkedIn...' : 'Test LinkedIn Connection'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => saveLiMutation.mutate()}
+                  disabled={saveLiMutation.isPending || !liAuthorUrn || (!liAccessToken && !liStatus?.connected)}
+                  className="px-5 py-2.5 bg-[#0A66C2] hover:bg-[#084e96] text-white font-bold text-xs rounded-xl shadow-sm transition disabled:opacity-50"
+                >
+                  {saveLiMutation.isPending ? 'Connecting...' : 'Save & Connect LinkedIn'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
