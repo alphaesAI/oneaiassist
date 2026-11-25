@@ -231,6 +231,15 @@ export async function POST(req: Request) {
           ? AbTestingService.splitRecipients(customers, abTestSplit)
           : { variantA: customers, variantB: [] };
 
+        const tenantRecord = await db.tenant.findUnique({
+          where: { id: tenantId },
+          select: { name: true, contactEmail: true, contactPhone: true },
+        });
+        const dynamicSenderAddress = [tenantRecord?.name, tenantRecord?.contactEmail, tenantRecord?.contactPhone]
+          .filter(Boolean)
+          .join(' • ') || 'OneAI Assist';
+        const appOrigin = process.env.NEXTAUTH_URL || `${req.headers.get('x-forwarded-proto') || 'http'}://${req.headers.get('host') || 'localhost:3000'}`;
+
         const dispatchBatch = async (batch: typeof customers, variantLabel: 'A' | 'B') => {
           const activeTpl = variantLabel === 'B' && templateB ? templateB : template;
           const activeSubject = variantLabel === 'B' && abSubjectB ? abSubjectB : (campaign.subject || template.name);
@@ -271,15 +280,21 @@ export async function POST(req: Request) {
               last_name: customer.displayName.split(' ').slice(1).join(' ') || '',
               email: customer.email,
               policy_number: customer.activePolicy?.policyNumber || 'POL-58472',
-              unsubscribe_url: `https://${req.headers.get('host') || 'localhost:3000'}/api/unsubscribe?cid=${customer.id}`,
-              sender_address: '100 Innovation Way, Suite 400, San Francisco, CA 94107',
+              unsubscribe_url: `${appOrigin}/api/channels/email/unsubscribe?email=${encodeURIComponent(customer.email)}&tenantId=${tenantId}`,
+              sender_address: dynamicSenderAddress,
             };
 
             const { EmailTemplateEngine } = await import('@/lib/email/templateEngine');
             const renderedHtml = EmailTemplateEngine.render(rawBody, personalContext);
 
             try {
-              await emailTransport.sendText(customer.email, renderedHtml);
+              await emailTransport.sendEmail({
+                to: customer.email,
+                subject: EmailTemplateEngine.render(activeSubject, personalContext),
+                html: renderedHtml,
+                previewText: campaign.previewText || undefined,
+                replyTo: campaign.replyTo || undefined,
+              });
             } catch (sendErr) {
               console.error(`[Email Broadcast] Failed to send to ${customer.email}:`, sendErr);
               await db.broadcastJob.update({

@@ -47,7 +47,28 @@ export class ResendProviderAdapter implements IEmailProviderAdapter {
     };
   }
 
+  private assertValidApiKey(creds: EmailProviderCredentials) {
+    if (!creds.apiKey || creds.apiKey === 'mock_email_key') {
+      throw new Error('Resend API Key is not configured. Save a Full Access Resend API key in Email Provider Configuration first.');
+    }
+  }
+
+  private async findDomainByName(domain: string, apiKey: string): Promise<any | null> {
+    const listRes = await fetch('https://api.resend.com/domains', {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const listData = await listRes.json().catch(() => ({}));
+    if (!listRes.ok) {
+      throw new Error(listData.message || `Resend API failed (${listRes.status}) while listing domains. Ensure your API key has Full Access.`);
+    }
+    return Array.isArray(listData.data)
+      ? listData.data.find((d: any) => d.name?.toLowerCase() === domain.toLowerCase()) || null
+      : null;
+  }
+
   async registerDomain(domain: string, creds: EmailProviderCredentials): Promise<DomainStatusResult> {
+    this.assertValidApiKey(creds);
+
     const res = await fetch('https://api.resend.com/domains', {
       method: 'POST',
       headers: {
@@ -58,16 +79,32 @@ export class ResendProviderAdapter implements IEmailProviderAdapter {
     });
 
     const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      // If domain already exists in this Resend account, fetch its full record set
+      if (res.status === 409 || /already/i.test(data.message || '')) {
+        const existing = await this.findDomainByName(domain, creds.apiKey);
+        if (existing?.id) {
+          const getRes = await fetch(`https://api.resend.com/domains/${existing.id}`, {
+            headers: { Authorization: `Bearer ${creds.apiKey}` },
+          });
+          const domainDetails = await getRes.json().catch(() => ({}));
+          if (!getRes.ok) {
+            throw new Error(domainDetails.message || `Resend failed to fetch domain (${getRes.status})`);
+          }
+          return this.parseResendDomain(domain, domainDetails);
+        }
+      }
+      throw new Error(data.message || `Resend domain registration failed (${res.status}). Ensure your API key has Full Access.`);
+    }
+
     return this.parseResendDomain(domain, data);
   }
 
   async verifyDomain(domain: string, creds: EmailProviderCredentials): Promise<DomainStatusResult> {
+    this.assertValidApiKey(creds);
+
     // 1. Fetch domain list to find domain id
-    const listRes = await fetch('https://api.resend.com/domains', {
-      headers: { Authorization: `Bearer ${creds.apiKey}` },
-    });
-    const listData = await listRes.json().catch(() => ({}));
-    const found = Array.isArray(listData.data) ? listData.data.find((d: any) => d.name === domain) : null;
+    const found = await this.findDomainByName(domain, creds.apiKey);
 
     if (!found?.id) {
       // If not yet registered with Resend, register it
@@ -80,43 +117,49 @@ export class ResendProviderAdapter implements IEmailProviderAdapter {
       headers: { Authorization: `Bearer ${creds.apiKey}` },
     });
     const verifyData = await verifyRes.json().catch(() => ({}));
+    if (!verifyRes.ok) {
+      throw new Error(verifyData.message || `Resend verify failed (${verifyRes.status})`);
+    }
 
-    // 3. Get domain details
+    // Resend performs DNS checks asynchronously; brief pause improves immediate status accuracy
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    // 3. Get updated domain details
     const getRes = await fetch(`https://api.resend.com/domains/${found.id}`, {
       headers: { Authorization: `Bearer ${creds.apiKey}` },
     });
     const domainDetails = await getRes.json().catch(() => ({}));
+    if (!getRes.ok) {
+      throw new Error(domainDetails.message || `Resend failed to fetch domain status (${getRes.status})`);
+    }
 
     return this.parseResendDomain(domain, domainDetails);
   }
 
   private parseResendDomain(domain: string, data: any): DomainStatusResult {
     const records: DnsRecordItem[] = [];
-    const isVerified = data.status === 'verified';
+    const domainStatus = (data.status || '').toLowerCase();
+    const mappedStatus: DomainStatusResult['status'] =
+      domainStatus === 'verified' ? 'VERIFIED' : domainStatus === 'failed' ? 'FAILED' : 'PENDING';
 
     if (Array.isArray(data.records)) {
       for (const r of data.records) {
+        const recStatus = (r.status || '').toLowerCase();
         records.push({
           record: (r.record || 'TXT').toUpperCase() as any,
           name: r.name || domain,
-          type: r.type || 'TXT',
+          type: (r.type || 'TXT').toUpperCase(),
           value: r.value || '',
-          status: r.status === 'verified' ? 'VERIFIED' : 'PENDING',
+          status: recStatus === 'verified' ? 'VERIFIED' : recStatus === 'failed' ? 'FAILED' : 'PENDING',
           ttl: r.ttl?.toString() || 'Auto',
+          ...(typeof r.priority === 'number' ? { priority: r.priority } : {}),
         });
       }
-    } else {
-      // Standard recommended DNS defaults if mock or pending
-      records.push(
-        { record: 'SPF', name: domain, type: 'TXT', value: 'v=spf1 include:resend.com ~all', status: isVerified ? 'VERIFIED' : 'PENDING' },
-        { record: 'DKIM', name: `resend._domainkey.${domain}`, type: 'CNAME', value: `dkim.resend.com`, status: isVerified ? 'VERIFIED' : 'PENDING' },
-        { record: 'DMARC', name: `_dmarc.${domain}`, type: 'TXT', value: 'v=DMARC1; p=none;', status: isVerified ? 'VERIFIED' : 'PENDING' }
-      );
     }
 
     return {
       domain,
-      status: isVerified ? 'VERIFIED' : 'PENDING',
+      status: mappedStatus,
       records,
     };
   }

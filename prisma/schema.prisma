@@ -184,6 +184,17 @@ model Tenant {
   emailEvents          EmailEvent[]
   crossChannelJourneys CrossChannelJourney[]
   journeyEnrollments   JourneyEnrollment[]
+
+  // Digital Marketing Suite Relations
+  connectedAccounts    ConnectedAccount[]
+  marketingPosts       MarketingPost[]
+  publishJobs          PublishJob[]
+  complianceRules      ComplianceRule[]
+  ideas                Idea[]
+  feeds                Feed[]
+  postTemplates        SocialPostTemplate[]
+  marketingComments    MarketingComment[]
+  mediaAssets          MediaAsset[]
 }
 
 model BotConfig {
@@ -218,6 +229,13 @@ model User {
   policies      Policy[]
   auditLogs     AuditLog[]
   customerNotes CustomerNote[]
+
+  // Marketing relations
+  connectedAccounts   ConnectedAccount[]
+  createdPosts        MarketingPost[]
+  uploadedMediaAssets MediaAsset[]
+  createdIdeas        Idea[]
+  createdTemplates    SocialPostTemplate[]
 
   @@index([tenantId])
 }
@@ -1096,3 +1114,217 @@ model JourneyEnrollment {
   @@index([status])
   @@index([nextExecutionAt])
 }
+
+// ==========================================
+// DIGITAL MARKETING SUITE (BASELINED MODELS)
+// ==========================================
+
+model ConnectedAccount {
+  id                String    @id @default(cuid())
+  tenantId          String
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownerUserId       String
+  owner             User      @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  platform          String    // FACEBOOK, INSTAGRAM, LINKEDIN, YOUTUBE, TWITTER, THREADS
+  externalAccountId String
+  accountName       String
+  accessTokenEnc    String    @db.Text
+  refreshTokenEnc   String?   @db.Text
+  expiresAt         DateTime?
+  status            String    @default("ACTIVE") // ACTIVE, NEEDS_RECONNECT
+  lastSyncedAt      DateTime?
+  syncError         String?   @db.Text
+  leadsEnabled      Boolean   @default(false)
+  leadsSyncedAt     DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  jobs              PublishJob[]
+  comments          MarketingComment[]
+
+  @@unique([tenantId, ownerUserId, platform, externalAccountId])
+  @@index([tenantId])
+}
+
+model MediaAsset {
+  id               String         @id @default(cuid())
+  tenantId         String
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  uploadedByUserId String?
+  uploadedBy       User?          @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  filename         String
+  storageKey       String         @unique
+  mimeType         String
+  fileSize         Int
+  createdAt        DateTime       @default(now())
+
+  posts            MarketingPost[]
+  ideas            Idea[]
+
+  @@index([tenantId])
+}
+
+model MarketingPost {
+  id              String      @id @default(cuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByUserId String?
+  createdBy       User?       @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  title           String
+  caption         String      @db.Text
+  mediaAssetId    String?
+  mediaAsset      MediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  scheduledAt     DateTime?
+  auditOverridden Boolean     @default(false)
+  approvalStatus  String?     // PENDING, APPROVED, REJECTED
+  approvalNote    String?     @db.Text
+  reviewedByName  String?
+  reviewedAt      DateTime?
+  clientRequestId String
+  createdAt       DateTime    @default(now())
+
+  jobs            PublishJob[]
+  comments        MarketingComment[]
+
+  @@unique([tenantId, clientRequestId])
+  @@index([tenantId])
+  @@index([scheduledAt])
+}
+
+model PublishJob {
+  id           String            @id @default(cuid())
+  tenantId     String
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  postId       String
+  post         MarketingPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  accountId    String?
+  account      ConnectedAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  platform     String
+  accountName  String
+  caption      String            @db.Text
+  status       String            @default("PENDING") // AWAITING_APPROVAL, PENDING, PUBLISHING, SUCCESS, FAILED, NEEDS_REVIEW, CANCELLED
+  attempts     Int               @default(0)
+  runAt        DateTime          @default(now())
+  lockedAt     DateTime?
+  state        Json?
+  externalId   String?
+  externalUrl  String?
+  errorCode    String?
+  errorMessage String?           @db.Text
+  publishedAt  DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  metric       PostMetric?
+
+  @@unique([postId, accountId])
+  @@index([tenantId])
+  @@index([status, runAt])
+}
+
+model PostMetric {
+  jobId     String     @id
+  job       PublishJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  likes     Int?
+  comments  Int?
+  shares    Int?
+  saves     Int?
+  reach     Int?
+  views     Int?
+  fetchedAt DateTime   @default(now())
+}
+
+model ComplianceRule {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phrase      String
+  severity    String   // CRITICAL, WARNING
+  rule        String
+  message     String
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, phrase])
+  @@index([tenantId])
+}
+
+model Idea {
+  id           String      @id @default(cuid())
+  tenantId     String
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  authorId     String?
+  author       User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  title        String
+  body         String      @default("") @db.Text
+  status       String      @default("UNASSIGNED") // UNASSIGNED, TO_DO, IN_PROGRESS, DONE
+  tags         String      @default("[]") // JSON string of tag names
+  mediaAssetId String?
+  mediaAsset   MediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([tenantId, status])
+}
+
+model Feed {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title       String
+  feedUrl     String
+  siteUrl     String?
+  category    String    @default("General") // Featured, Tech, News, Business, etc.
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId])
+}
+
+model SocialPostTemplate {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownerUserId String?
+  ownerUser   User?     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  promptText  String    @db.Text
+  category    String    @default("General")
+  icon        String    @default("💡")
+  isPersonal  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, isPersonal])
+  @@index([ownerUserId])
+}
+
+model MarketingComment {
+  id           String            @id @default(cuid())
+  tenantId     String
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  postId       String?
+  post         MarketingPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  accountId    String?
+  account      ConnectedAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  platform     String            // THREADS, INSTAGRAM, FACEBOOK, TWITTER, YOUTUBE
+  authorName   String
+  authorHandle String?
+  authorAvatar String?
+  content      String            @db.Text
+  status       String            @default("UNANSWERED") // UNANSWERED, REPLIED, RESOLVED
+  sentiment    String            @default("NEUTRAL") // POSITIVE, NEUTRAL, NEGATIVE, QUESTION
+  isQuestion   Boolean           @default(false)
+  hasHeart     Boolean           @default(false)
+  replyText    String?           @db.Text
+  repliedAt    DateTime?
+  repliedBy    String?
+  externalId   String?
+  isHidden     Boolean           @default(false)
+  likeCount    Int               @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([accountId, externalId])
+  @@index([tenantId, status])
+  @@index([tenantId, platform])
+}
+
