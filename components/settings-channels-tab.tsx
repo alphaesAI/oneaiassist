@@ -255,6 +255,7 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
 
   const verifyDomainMutation = useMutation({
     mutationFn: async (domain: string) => {
+      setDomainError('');
       const res = await fetch('/api/settings/email/domains/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -274,6 +275,9 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
     },
     onSuccess: () => {
       refetchEmailDomains();
+    },
+    onError: (err: any) => {
+      setDomainError(err.message);
     },
   });
 
@@ -1926,61 +1930,62 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
                               <tr>
                                 <th className="p-2">Type</th>
                                 <th className="p-2">Host / Name</th>
-                                <th className="p-2">Value</th>
+                                <th className="p-2">Value / Priority</th>
                                 <th className="p-2">Status</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 font-mono">
-                              {/* SPF */}
-                              <tr>
-                                <td className="p-2 font-bold text-blue-600">TXT (SPF)</td>
-                                <td className="p-2">{d.spfRecord?.name || '@'}</td>
-                                <td className="p-2 truncate max-w-[200px] flex items-center gap-1">
-                                  <span>{d.spfRecord?.value || 'v=spf1 include:resend.com ~all'}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopy(d.spfRecord?.value || 'v=spf1 include:resend.com ~all')}
-                                    className="text-gray-400 hover:text-gray-700"
-                                  >
-                                    <Copy className="w-3 h-3" />
-                                  </button>
-                                </td>
-                                <td className="p-2 text-emerald-600 font-bold">{d.status === 'VERIFIED' ? '✓' : 'Pending'}</td>
-                              </tr>
-                              {/* DKIM */}
-                              {dkimArray.map((dk: any, idx: number) => (
-                                <tr key={idx}>
-                                  <td className="p-2 font-bold text-purple-600">CNAME (DKIM)</td>
-                                  <td className="p-2">{dk.name || `resend._domainkey.${d.domain}`}</td>
-                                  <td className="p-2 truncate max-w-[200px] flex items-center gap-1">
-                                    <span>{dk.value || 'dkim.resend.com'}</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCopy(dk.value || 'dkim.resend.com')}
-                                      className="text-gray-400 hover:text-gray-700"
-                                    >
-                                      <Copy className="w-3 h-3" />
-                                    </button>
-                                  </td>
-                                  <td className="p-2 text-emerald-600 font-bold">{d.status === 'VERIFIED' ? '✓' : 'Pending'}</td>
-                                </tr>
-                              ))}
-                              {/* DMARC */}
-                              <tr>
-                                <td className="p-2 font-bold text-indigo-600">TXT (DMARC)</td>
-                                <td className="p-2">{d.dmarcRecord?.name || `_dmarc.${d.domain}`}</td>
-                                <td className="p-2 truncate max-w-[200px] flex items-center gap-1">
-                                  <span>{d.dmarcRecord?.value || 'v=DMARC1; p=none;'}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopy(d.dmarcRecord?.value || 'v=DMARC1; p=none;')}
-                                    className="text-gray-400 hover:text-gray-700"
-                                  >
-                                    <Copy className="w-3 h-3" />
-                                  </button>
-                                </td>
-                                <td className="p-2 text-emerald-600 font-bold">{d.status === 'VERIFIED' ? '✓' : 'Pending'}</td>
-                              </tr>
+                              {[
+                                ...(d.spfRecord ? [d.spfRecord] : []),
+                                ...dkimArray,
+                                ...(d.dmarcRecord ? [d.dmarcRecord] : []),
+                              ].map((rec: any, idx: number) => {
+                                const recStatus = rec.status || (d.status === 'VERIFIED' ? 'VERIFIED' : 'PENDING');
+                                const typeLabel = `${rec.type || 'TXT'}${rec.record ? ` (${rec.record})` : ''}`;
+                                return (
+                                  <tr key={idx}>
+                                    <td className="p-2 font-bold text-blue-600 whitespace-nowrap">{typeLabel}</td>
+                                    <td className="p-2">
+                                      <div className="flex items-center gap-1 max-w-[180px]">
+                                        <span className="truncate" title={rec.name || '@'}>{rec.name || '@'}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCopy(rec.name || '@')}
+                                          className="text-gray-400 hover:text-gray-700 shrink-0"
+                                          title="Copy Host / Name"
+                                        >
+                                          <Copy className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                    <td className="p-2">
+                                      <div className="flex items-center gap-1 max-w-[260px]">
+                                        <span className="truncate" title={rec.value}>
+                                          {typeof rec.priority === 'number' ? `[Pri ${rec.priority}] ` : ''}
+                                          {rec.value}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCopy(rec.value || '')}
+                                          className="text-gray-400 hover:text-gray-700 shrink-0"
+                                          title="Copy Value"
+                                        >
+                                          <Copy className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                    <td className={`p-2 font-bold whitespace-nowrap ${
+                                      recStatus === 'VERIFIED'
+                                        ? 'text-emerald-600'
+                                        : recStatus === 'FAILED'
+                                        ? 'text-red-600'
+                                        : 'text-amber-600'
+                                    }`}>
+                                      {recStatus === 'VERIFIED' ? '✓ Verified' : recStatus === 'FAILED' ? '✗ Failed' : 'Pending'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>

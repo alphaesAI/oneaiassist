@@ -26,9 +26,9 @@ export class DomainVerificationService {
       };
     }
 
-    const spf = result.records.find((r) => r.record === 'SPF');
-    const dkim = result.records.filter((r) => r.record === 'DKIM');
+    const spfTxt = result.records.find((r) => r.record === 'SPF' && r.type === 'TXT') || result.records.find((r) => r.record === 'SPF');
     const dmarc = result.records.find((r) => r.record === 'DMARC');
+    const extraRecords = result.records.filter((r) => r !== spfTxt && r !== dmarc);
 
     await db.tenantSendingDomain.upsert({
       where: {
@@ -39,8 +39,8 @@ export class DomainVerificationService {
       },
       update: {
         status: result.status,
-        spfRecord: spf ? JSON.parse(JSON.stringify(spf)) : undefined,
-        dkimRecords: dkim.length > 0 ? JSON.parse(JSON.stringify(dkim)) : undefined,
+        spfRecord: spfTxt ? JSON.parse(JSON.stringify(spfTxt)) : undefined,
+        dkimRecords: extraRecords.length > 0 ? JSON.parse(JSON.stringify(extraRecords)) : undefined,
         dmarcRecord: dmarc ? JSON.parse(JSON.stringify(dmarc)) : undefined,
         verifiedAt: result.status === 'VERIFIED' ? new Date() : null,
       },
@@ -48,8 +48,8 @@ export class DomainVerificationService {
         tenantId,
         domain: cleanDomain,
         status: result.status,
-        spfRecord: spf ? JSON.parse(JSON.stringify(spf)) : undefined,
-        dkimRecords: dkim.length > 0 ? JSON.parse(JSON.stringify(dkim)) : undefined,
+        spfRecord: spfTxt ? JSON.parse(JSON.stringify(spfTxt)) : undefined,
+        dkimRecords: extraRecords.length > 0 ? JSON.parse(JSON.stringify(extraRecords)) : undefined,
         dmarcRecord: dmarc ? JSON.parse(JSON.stringify(dmarc)) : undefined,
         verifiedAt: result.status === 'VERIFIED' ? new Date() : null,
       },
@@ -82,21 +82,30 @@ export class DomainVerificationService {
     }
 
     const isVerified = result.status === 'VERIFIED';
-    const spf = result.records.find((r) => r.record === 'SPF');
-    const dkim = result.records.filter((r) => r.record === 'DKIM');
+    const spfTxt = result.records.find((r) => r.record === 'SPF' && r.type === 'TXT') || result.records.find((r) => r.record === 'SPF');
     const dmarc = result.records.find((r) => r.record === 'DMARC');
+    const extraRecords = result.records.filter((r) => r !== spfTxt && r !== dmarc);
 
-    await db.tenantSendingDomain.update({
+    await db.tenantSendingDomain.upsert({
       where: {
         tenantId_domain: {
           tenantId,
           domain: cleanDomain,
         },
       },
-      data: {
+      update: {
         status: result.status,
-        spfRecord: spf ? JSON.parse(JSON.stringify(spf)) : undefined,
-        dkimRecords: dkim.length > 0 ? JSON.parse(JSON.stringify(dkim)) : undefined,
+        spfRecord: spfTxt ? JSON.parse(JSON.stringify(spfTxt)) : undefined,
+        dkimRecords: extraRecords.length > 0 ? JSON.parse(JSON.stringify(extraRecords)) : undefined,
+        dmarcRecord: dmarc ? JSON.parse(JSON.stringify(dmarc)) : undefined,
+        verifiedAt: isVerified ? new Date() : null,
+      },
+      create: {
+        tenantId,
+        domain: cleanDomain,
+        status: result.status,
+        spfRecord: spfTxt ? JSON.parse(JSON.stringify(spfTxt)) : undefined,
+        dkimRecords: extraRecords.length > 0 ? JSON.parse(JSON.stringify(extraRecords)) : undefined,
         dmarcRecord: dmarc ? JSON.parse(JSON.stringify(dmarc)) : undefined,
         verifiedAt: isVerified ? new Date() : null,
       },

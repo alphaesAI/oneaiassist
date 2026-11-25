@@ -73,6 +73,66 @@ export class EmailTransportAdapter implements IMessageTransport {
     return { messageId: result.messageId };
   }
 
+  async sendEmail(opts: {
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+    previewText?: string;
+    replyTo?: string;
+  }): Promise<SendResult> {
+    const cleanEmail = opts.to.trim().toLowerCase();
+
+    const suppression = await EmailSuppressionService.isEmailSuppressed(this.tenantId, cleanEmail);
+    if (suppression.suppressed) {
+      throw new Error(`Email delivery blocked: Recipient ${cleanEmail} is suppressed (${suppression.reason}).`);
+    }
+
+    const { adapter, creds, config } = await ProviderFactory.getTenantCredentials(this.tenantId);
+    if (config?.isAutoPaused) {
+      throw new Error(`Email delivery auto-paused for tenant ${this.tenantId}: High complaint rate (${config.complaintRate}%). Sending halted.`);
+    }
+
+    const appUrl = process.env.NEXTAUTH_URL || 'https://oneai.drgodly.com';
+    const unsubUrl = `${appUrl}/api/channels/email/unsubscribe?email=${encodeURIComponent(cleanEmail)}&tenantId=${this.tenantId}`;
+    const { EmailTrackingService } = await import('./tracking');
+    const trackingPixelUrl = EmailTrackingService.generateOpenTrackingPixelUrl(appUrl, this.tenantId);
+
+    const headers: Record<string, string> = {
+      'List-Unsubscribe': `<${unsubUrl}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    };
+
+    const preheaderHtml = opts.previewText
+      ? `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${opts.previewText}</div>`
+      : '';
+    const pixelImg = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none !important;" alt="" />`;
+    const finalHtml = `${preheaderHtml}${opts.html}${pixelImg}`;
+    const plainFallback = opts.text || opts.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const result = await adapter.send({
+      to: cleanEmail,
+      subject: opts.subject,
+      html: finalHtml,
+      text: `${plainFallback}\n\nUnsubscribe: ${unsubUrl}`,
+      replyTo: opts.replyTo,
+      headers,
+    }, creds);
+
+    if (result.status === 'FAILED') {
+      throw new Error(result.error || 'Email dispatch failed via provider.');
+    }
+
+    EmailTrackingService.recordEmailEvent({
+      tenantId: this.tenantId,
+      email: cleanEmail,
+      eventType: 'DELIVERED',
+      messageId: result.messageId,
+    }).catch((err) => console.error('[EmailTransport] Error logging delivery event:', err));
+
+    return { messageId: result.messageId };
+  }
+
   async sendImage(to: string, opts: { filePath: string; caption?: string }): Promise<SendResult> {
     const text = opts.caption ? `${opts.caption}\n\n[Attached Image: ${opts.filePath}]` : `[Attached Image: ${opts.filePath}]`;
     return this.sendText(to, text);

@@ -3,7 +3,10 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import dns from 'dns';
 
-// Ensure IPv4 is prioritized for database host resolution to prevent IPv6 ENETUNREACH/ETIMEDOUT on dual-stack environments
+// Ensure IPv4 is prioritized and public fallback DNS is configured for database host resolution
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+} catch {}
 if (typeof dns.setDefaultResultOrder === 'function') {
   dns.setDefaultResultOrder('ipv4first');
 }
@@ -16,7 +19,20 @@ const origLookup = dns.lookup;
     cb = options;
     opts = {};
   }
-  return origLookup(hostname, { ...opts, family: 4 }, (err: any, address: any, family: any) => {
+  origLookup(hostname, { ...opts, family: 4 }, (err: any, address: any, family: any) => {
+    if (err && (err.code === 'EAI_AGAIN' || err.code === 'ENOTFOUND')) {
+      // Fallback directly to dns.resolve4 using public DNS
+      dns.resolve4(hostname, (resErr, addresses) => {
+        if (!resErr && addresses && addresses.length > 0) {
+          if (opts && opts.all) {
+            return cb(null, addresses.map((addr) => ({ address: addr, family: 4 })));
+          }
+          return cb(null, addresses[0], 4);
+        }
+        cb(err);
+      });
+      return;
+    }
     if (opts && opts.all && !Array.isArray(address) && address) {
       return cb(err, [{ address, family: family || 4 }]);
     }

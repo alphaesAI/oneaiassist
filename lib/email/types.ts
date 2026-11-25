@@ -22,6 +22,7 @@ export interface DnsRecordItem {
   value: string;
   status: 'VERIFIED' | 'PENDING' | 'FAILED';
   ttl?: string;
+  priority?: number;
 }
 
 export interface DomainStatusResult {

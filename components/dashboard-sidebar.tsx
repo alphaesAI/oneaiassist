@@ -23,6 +23,9 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Sparkles,
+  MessageSquare,
+  Mail,
   LucideIcon,
 } from 'lucide-react';
 
@@ -100,12 +103,36 @@ export default function DashboardSidebar() {
           icon: CalendarClock,
         },
         {
-          name: 'Content & Social Hub',
+          name: 'Marketing Hub',
           href: '/dashboard/marketing',
           roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER'],
           icon: LineChart,
-          badge: 'New',
-          badgeColor: 'bg-white/20 text-white border border-white/30',
+        },
+        {
+          name: 'Email Marketing',
+          href: '/dashboard/marketing/email',
+          roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER'],
+          icon: Mail,
+        },
+        {
+          name: 'Social Posts & Calendar',
+          href: '/dashboard/marketing/posts',
+          roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER'],
+          icon: CalendarClock,
+          badge: 'Social',
+          badgeColor: 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30',
+        },
+        {
+          name: 'AI Copy & Ideas',
+          href: '/dashboard/marketing/create',
+          roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER'],
+          icon: Sparkles,
+        },
+        {
+          name: 'Community Stream',
+          href: '/dashboard/marketing/community',
+          roles: ['PLATFORM_OWNER', 'ADMIN', 'MANAGER'],
+          icon: MessageSquare,
         },
         {
           name: 'AI Agent & Bot',

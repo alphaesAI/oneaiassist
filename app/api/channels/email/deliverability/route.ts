@@ -7,12 +7,18 @@ export async function GET() {
     const { tenantId, role } = await getTenantContext();
     const db = getTenantPrisma(tenantId, role);
 
+    const now = new Date();
+    const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
     const [
       config,
       totalDelivered,
       totalComplaints,
       totalBounces,
       totalUnsubscribes,
+      sentToday,
+      sentThisMonth,
       domains,
       recentEvents,
     ] = await Promise.all([
@@ -21,6 +27,8 @@ export async function GET() {
       db.emailEvent.count({ where: { tenantId, eventType: 'COMPLAINT' } }),
       db.emailEvent.count({ where: { tenantId, eventType: 'BOUNCE_HARD' } }),
       db.emailEvent.count({ where: { tenantId, eventType: 'UNSUBSCRIBE' } }),
+      db.emailEvent.count({ where: { tenantId, eventType: 'DELIVERED', createdAt: { gte: startOfToday } } }),
+      db.emailEvent.count({ where: { tenantId, eventType: 'DELIVERED', createdAt: { gte: startOfMonth } } }),
       db.tenantSendingDomain.findMany({ where: { tenantId } }),
       db.emailEvent.findMany({
         where: { tenantId },
@@ -44,14 +52,21 @@ export async function GET() {
     const isAutoPaused = config?.isAutoPaused || complaintRate >= 0.3;
     const isWarning = !isAutoPaused && complaintRate >= 0.1;
 
-    // Warm-up ramp calculation
-    const currentDailyQuota = config?.dailySendQuota || 1000;
-    const hourlyPace = config?.hourlySendRate || 100;
+    // Resend Free tier = 100/day unless tenant configured a higher plan quota
+    const currentDailyQuota = config?.dailySendQuota ?? 100;
+    const hourlyPace = config?.hourlySendRate ?? 100;
+    const remainingToday = Math.max(0, currentDailyQuota - sentToday);
 
     return NextResponse.json({
       healthStatus: isAutoPaused ? 'PAUSED' : isWarning ? 'WARNING' : 'HEALTHY',
       isAutoPaused,
       isWarning,
+      usage: {
+        sentToday,
+        sentThisMonth,
+        dailyQuota: currentDailyQuota,
+        remainingToday,
+      },
       metrics: {
         totalDelivered,
         totalComplaints,
@@ -67,7 +82,7 @@ export async function GET() {
       warmup: {
         dailyQuota: currentDailyQuota,
         hourlyRate: hourlyPace,
-        recommendedStage: currentDailyQuota <= 500 ? 'Stage 1 (Initial)' : currentDailyQuota <= 2000 ? 'Stage 2 (Growth)' : 'Stage 3 (Mature)',
+        recommendedStage: currentDailyQuota <= 100 ? 'Resend Free (100/day)' : currentDailyQuota <= 2000 ? 'Stage 2 (Growth)' : 'Stage 3 (Mature)',
       },
       domains: domains.map((d) => ({
         domain: d.domain,
