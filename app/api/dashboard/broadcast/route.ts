@@ -223,92 +223,24 @@ export async function POST(req: Request) {
       });
 
       if (channel === 'EMAIL') {
-        const { EmailTransportAdapter } = await import('@/lib/email/EmailTransportAdapter');
-        const emailTransport = new EmailTransportAdapter(tenantId);
-        const { AbTestingService } = await import('@/lib/email/abTesting');
+        const { dispatchEmailCampaign } = await import('@/lib/email/dispatchCampaign');
+        const appOrigin =
+          process.env.NEXTAUTH_URL ||
+          `${req.headers.get('x-forwarded-proto') || 'http'}://${req.headers.get('host') || 'localhost:3000'}`;
 
-        const { variantA, variantB } = isAbTest
-          ? AbTestingService.splitRecipients(customers, abTestSplit)
-          : { variantA: customers, variantB: [] };
-
-        const tenantRecord = await db.tenant.findUnique({
-          where: { id: tenantId },
-          select: { name: true, contactEmail: true, contactPhone: true },
-        });
-        const dynamicSenderAddress = [tenantRecord?.name, tenantRecord?.contactEmail, tenantRecord?.contactPhone]
-          .filter(Boolean)
-          .join(' • ') || 'OneAI Assist';
-        const appOrigin = process.env.NEXTAUTH_URL || `${req.headers.get('x-forwarded-proto') || 'http'}://${req.headers.get('host') || 'localhost:3000'}`;
-
-        const dispatchBatch = async (batch: typeof customers, variantLabel: 'A' | 'B') => {
-          const activeTpl = variantLabel === 'B' && templateB ? templateB : template;
-          const activeSubject = variantLabel === 'B' && abSubjectB ? abSubjectB : (campaign.subject || template.name);
-
-          for (const customer of batch) {
-            if (!customer.email) continue;
-
-            const job = await db.broadcastJob.create({
-              data: {
-                tenantId,
-                campaignId: campaign.id,
-                customerId: customer.id,
-                status: 'SENT',
-                scheduledFor: new Date(),
-                processedAt: new Date(),
-              },
-            });
-
-            let conversation = await db.conversation.findFirst({
-              where: { tenantId, customerId: customer.id, channel: 'EMAIL' },
-            });
-
-            if (!conversation) {
-              conversation = await db.conversation.create({
-                data: {
-                  tenantId,
-                  customerId: customer.id,
-                  channel: 'EMAIL',
-                  status: 'OPEN',
-                },
-              });
-            }
-
-            const rawBody = activeTpl.htmlBody || activeTpl.body || '';
-            const personalContext = {
-              name: customer.displayName,
-              first_name: customer.displayName.split(' ')[0],
-              last_name: customer.displayName.split(' ').slice(1).join(' ') || '',
-              email: customer.email,
-              policy_number: customer.activePolicy?.policyNumber || 'POL-58472',
-              unsubscribe_url: `${appOrigin}/api/channels/email/unsubscribe?email=${encodeURIComponent(customer.email)}&tenantId=${tenantId}`,
-              sender_address: dynamicSenderAddress,
-            };
-
-            const { EmailTemplateEngine } = await import('@/lib/email/templateEngine');
-            const renderedHtml = EmailTemplateEngine.render(rawBody, personalContext);
-
-            try {
-              await emailTransport.sendEmail({
-                to: customer.email,
-                subject: EmailTemplateEngine.render(activeSubject, personalContext),
-                html: renderedHtml,
-                previewText: campaign.previewText || undefined,
-                replyTo: campaign.replyTo || undefined,
-              });
-            } catch (sendErr) {
-              console.error(`[Email Broadcast] Failed to send to ${customer.email}:`, sendErr);
-              await db.broadcastJob.update({
-                where: { id: job.id },
-                data: { status: 'FAILED', lastError: sendErr instanceof Error ? sendErr.message : String(sendErr) },
-              });
-            }
-          }
-        };
-
-        await dispatchBatch(variantA, 'A');
-        if (variantB.length > 0) {
-          await dispatchBatch(variantB, 'B');
+        const emailTotal = customers.filter((c) => Boolean(c.email)).length;
+        if (emailTotal > 25) {
+          await db.broadcastCampaign.update({
+            where: { id: campaign.id },
+            data: { status: 'SENDING' },
+          });
+          void dispatchEmailCampaign({ campaignId: campaign.id, tenantId, appOrigin }).catch((err) =>
+            console.error('[Email Broadcast] Background batch error:', err)
+          );
+          return NextResponse.json({ ...campaign, status: 'SENDING' }, { status: 202 });
         }
+
+        await dispatchEmailCampaign({ campaignId: campaign.id, tenantId, appOrigin });
       } else {
         // Send real WhatsApp message via whatsapp-engine HTTP Service
         for (const customer of customers) {
