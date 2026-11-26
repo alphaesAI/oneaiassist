@@ -7,12 +7,15 @@ export interface OutboundEmail {
   replyTo?: string;
   headers?: Record<string, string>;
   tags?: Array<{ name: string; value: string }>;
+  idempotencyKey?: string;
 }
 
 export interface EmailSendResult {
   messageId: string;
   status: 'SENT' | 'QUEUED' | 'FAILED';
   error?: string;
+  httpStatus?: number;
+  retryable?: boolean;
 }
 
 export interface DnsRecordItem {

@@ -26,31 +26,20 @@ export class ProviderFactory {
       where: { tenantId },
     });
 
-    if (!config) {
-      // Fallback to platform-level env configuration
-      const fallbackApiKey = process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || 'mock_email_key';
-      const fromName = process.env.DEFAULT_FROM_NAME || 'OneAIAssist Care';
-      const fromEmail = process.env.DEFAULT_FROM_EMAIL || 'notifications@oneaiassist.com';
-
-      return {
-        adapter: this.resendAdapter,
-        creds: {
-          apiKey: fallbackApiKey,
-          fromName,
-          fromEmail,
-        },
-        config: null,
-      };
+    if (!config || !config.encryptedApiKey) {
+      throw new Error('Tenant has no email provider configured. Please configure an email provider in Settings > Email.');
     }
 
-    let apiKey = '';
-    if (config.encryptedApiKey) {
-      try {
-        apiKey = decrypt(config.encryptedApiKey);
-      } catch (err) {
-        console.error(`[ProviderFactory] Decryption failed for tenant ${tenantId} email API key:`, err);
-        apiKey = config.encryptedApiKey; // Fallback in case raw key was passed in testing
-      }
+
+    // The key is always stored encrypted. A value that cannot be decrypted is never used as-is:
+    // that would let a plain-text key sit in the database, and would hide a wrong ENCRYPTION_KEY.
+    let apiKey: string;
+    try {
+      apiKey = decrypt(config.encryptedApiKey);
+    } catch {
+      throw new Error(
+        'The saved email provider API key could not be read. Please enter the API key again in Settings > Email.'
+      );
     }
 
     const adapter = this.getAdapter(config.provider);

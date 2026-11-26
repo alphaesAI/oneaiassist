@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
+import { EmailTemplateEngine } from '@/lib/email/templateEngine';
 
 export async function GET(
   req: Request,
@@ -57,14 +58,17 @@ export async function PUT(
       ? name.toLowerCase().trim().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_')
       : existing.name;
 
+    const sanitizedBody = body !== undefined ? (existing.channel === 'EMAIL' ? EmailTemplateEngine.sanitizeHtml(body) : body) : existing.body;
+
     const updated = await db.template.update({
       where: { id: params.id },
       data: {
         name: formattedName,
         category: category || existing.category,
         language: language || existing.language,
-        body: body ?? existing.body,
-        content: body ?? existing.content,
+        body: sanitizedBody,
+        content: sanitizedBody,
+        ...(existing.channel === 'EMAIL' && body !== undefined ? { htmlBody: sanitizedBody } : {}),
         header: header ?? existing.header,
         footer: footer ?? existing.footer,
         ctaButtons: ctaButtons ?? existing.ctaButtons,

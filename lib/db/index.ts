@@ -51,7 +51,7 @@ if (!connectionString) {
 
 const poolConfig = {
   connectionString,
-  max: 20,
+  max: Number(process.env.PG_POOL_MAX || 5),
   connectionTimeoutMillis: 30000,
   idleTimeoutMillis: 30000,
   keepAlive: true,

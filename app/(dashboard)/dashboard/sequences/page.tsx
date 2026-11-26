@@ -28,6 +28,7 @@ interface SequenceStep {
   channel?: 'EMAIL' | 'WHATSAPP' | 'INSTAGRAM';
   delayDays?: number;
   delayHours?: number;
+  templateId?: string;
   templateName?: string;
   subject?: string;
   tagName?: string;
@@ -53,6 +54,38 @@ interface Sequence {
   steps: SequenceStep[];
 }
 
+type BuilderStepType = 'SEND_EMAIL' | 'SEND_WHATSAPP' | 'WAIT_DELAY' | 'ADD_TAG';
+
+interface BuilderStep {
+  id: string;
+  type: BuilderStepType;
+  templateId: string;
+  subject: string;
+  delayHours: number;
+  tagName: string;
+}
+
+interface TemplateOption {
+  id: string;
+  name: string;
+  channel: string;
+  subject?: string | null;
+}
+
+interface ListOption {
+  id: string;
+  name: string;
+}
+
+const newBuilderStep = (type: BuilderStepType = 'SEND_EMAIL'): BuilderStep => ({
+  id: `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+  type,
+  templateId: '',
+  subject: '',
+  delayHours: 24,
+  tagName: '',
+});
+
 export default function SequencesPage() {
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +93,13 @@ export default function SequencesPage() {
   const [newSeqName, setNewSeqName] = useState('');
   const [newSeqDesc, setNewSeqDesc] = useState('');
   const [newSeqTrigger, setNewSeqTrigger] = useState('CONTACT_CREATED');
-  const [newSeqFallback, setNewSeqFallback] = useState('WHATSAPP_TO_EMAIL');
+  const [builderSteps, setBuilderSteps] = useState<BuilderStep[]>([newBuilderStep('SEND_EMAIL')]);
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [lists, setLists] = useState<ListOption[]>([]);
+  const [triggerTag, setTriggerTag] = useState('');
+  const [triggerListId, setTriggerListId] = useState('');
+  const [formError, setFormError] = useState('');
+  const [pageError, setPageError] = useState('');
   const [newFrequencyCap, setNewFrequencyCap] = useState(1);
   const [newQuietStart, setNewQuietStart] = useState('21:00');
   const [newQuietEnd, setNewQuietEnd] = useState('08:00');
@@ -85,19 +124,52 @@ export default function SequencesPage() {
     fetchSequences();
   }, []);
 
+  // The step builder needs the organization's real templates and lists to choose from.
+  useEffect(() => {
+    if (!isModalOpen) return;
+    setFormError('');
+    fetch('/api/dashboard/templates')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setTemplates(Array.isArray(data) ? data : []))
+      .catch(() => setTemplates([]));
+    fetch('/api/contacts/lists')
+      .then((r) => (r.ok ? r.json() : { lists: [] }))
+      .then((data) => setLists(Array.isArray(data?.lists) ? data.lists : []))
+      .catch(() => setLists([]));
+  }, [isModalOpen]);
+
+  const updateStep = (id: string, patch: Partial<BuilderStep>) =>
+    setBuilderSteps((prev) => prev.map((st) => (st.id === id ? { ...st, ...patch } : st)));
+  const removeStep = (id: string) => setBuilderSteps((prev) => prev.filter((st) => st.id !== id));
+  const moveStep = (index: number, direction: -1 | 1) =>
+    setBuilderSteps((prev) => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+
   const toggleStatus = async (id: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    setPageError('');
     try {
-      setSequences((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, status: nextStatus } : s))
-      );
-      await fetch('/api/sequences', {
+      const res = await fetch('/api/sequences', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status: nextStatus }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPageError(data.error || 'Could not change the journey status.');
+        return;
+      }
+      setSequences((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, status: nextStatus } : s))
+      );
     } catch (err) {
       console.error('Failed to toggle status:', err);
+      setPageError('Could not change the journey status.');
       fetchSequences();
     }
   };
@@ -105,32 +177,35 @@ export default function SequencesPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSeqName.trim()) return;
+    setFormError('');
     try {
       setSubmitting(true);
 
-      let steps: SequenceStep[] = [];
-      if (newSeqFallback === 'WHATSAPP_TO_EMAIL') {
-        steps = [
-          { id: 's1', type: 'SEND_WHATSAPP', channel: 'WHATSAPP', templateName: 'welcome_quote_summary' },
-          { id: 's2', type: 'WAIT_DELAY', delayHours: 24 },
-          { id: 's3', type: 'BRANCH_CONDITION', conditionType: 'WHATSAPP_UNREAD_24H', onFalseStepIndex: 3 },
-          { id: 's4', type: 'SEND_EMAIL', channel: 'EMAIL', subject: 'Your requested policy quote breakdown' },
-          { id: 's5', type: 'ADD_TAG', tagName: 'Cross-Channel Contacted' },
-        ];
-      } else if (newSeqFallback === 'EMAIL_TO_WHATSAPP') {
-        steps = [
-          { id: 's1', type: 'SEND_EMAIL', channel: 'EMAIL', subject: 'Special policy options for you' },
-          { id: 's2', type: 'WAIT_DELAY', delayHours: 2 },
-          { id: 's3', type: 'SEND_WHATSAPP', channel: 'WHATSAPP', templateName: 'advisor_quote_assistant' },
-          { id: 's4', type: 'HANDOFF_TO_HUMAN' },
-        ];
-      } else {
-        steps = [
-          { id: 's1', type: 'SEND_WHATSAPP', channel: 'WHATSAPP', templateName: 'standard_welcome' },
-          { id: 's2', type: 'WAIT_DELAY', delayHours: 48 },
-          { id: 's3', type: 'SEND_EMAIL', channel: 'EMAIL', subject: 'Coverage reminder & perks' },
-        ];
-      }
+      // Steps are sent exactly as built: real template IDs, no sample content.
+      const steps = builderSteps.map((st) => {
+        const tpl = templates.find((t) => t.id === st.templateId);
+        if (st.type === 'SEND_EMAIL') {
+          return {
+            id: st.id,
+            type: st.type,
+            channel: 'EMAIL',
+            templateId: st.templateId,
+            templateName: tpl?.name,
+            subject: st.subject.trim() || tpl?.subject || undefined,
+          };
+        }
+        if (st.type === 'SEND_WHATSAPP') {
+          return { id: st.id, type: st.type, channel: 'WHATSAPP', templateId: st.templateId, templateName: tpl?.name };
+        }
+        if (st.type === 'WAIT_DELAY') {
+          return { id: st.id, type: st.type, delayHours: Number(st.delayHours) };
+        }
+        return { id: st.id, type: st.type, tagName: st.tagName.trim() };
+      });
+
+      const triggerConfig: Record<string, string> = {};
+      if (newSeqTrigger === 'TAG_ADDED' && triggerTag.trim()) triggerConfig.tag = triggerTag.trim();
+      if (newSeqTrigger === 'LIST_JOINED' && triggerListId) triggerConfig.listId = triggerListId;
 
       const res = await fetch('/api/sequences', {
         method: 'POST',
@@ -139,21 +214,28 @@ export default function SequencesPage() {
           name: newSeqName,
           description: newSeqDesc,
           trigger: newSeqTrigger,
+          triggerConfig,
           steps,
           frequencyCapDays: newFrequencyCap,
           quietHoursStart: newQuietStart,
           quietHoursEnd: newQuietEnd,
         }),
       });
-      const data = await res.json();
-      if (data.sequence) {
-        setIsModalOpen(false);
-        setNewSeqName('');
-        setNewSeqDesc('');
-        fetchSequences();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.sequence) {
+        setFormError(data.error || 'Could not create the journey.');
+        return;
       }
+      setIsModalOpen(false);
+      setNewSeqName('');
+      setNewSeqDesc('');
+      setTriggerTag('');
+      setTriggerListId('');
+      setBuilderSteps([newBuilderStep('SEND_EMAIL')]);
+      fetchSequences();
     } catch (err) {
       console.error('Failed to create sequence:', err);
+      setFormError('Could not create the journey.');
     } finally {
       setSubmitting(false);
     }
@@ -193,6 +275,12 @@ export default function SequencesPage() {
           </button>
         </div>
       </div>
+
+      {pageError && (
+        <div className="p-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-semibold" role="alert">
+          {pageError}
+        </div>
+      )}
 
       {/* Metrics Banner */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -381,7 +469,7 @@ export default function SequencesPage() {
       {/* Modal for creating a new cross-channel journey */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Zap className="h-5 w-5 text-[#004ac6]" />
@@ -436,26 +524,151 @@ export default function SequencesPage() {
                     <option value="CONTACT_CREATED">Contact / Lead Created</option>
                     <option value="TAG_ADDED">Tag Added to Contact</option>
                     <option value="FORM_SUBMITTED">Website Form Submitted</option>
+                    <option value="LIST_JOINED">Contact Joined a List</option>
+                    <option value="EMAIL_OPENED">Email Opened</option>
                     <option value="EMAIL_LINK_CLICKED">Email Link Clicked</option>
                     <option value="WHATSAPP_UNREAD_TIMEOUT">WhatsApp Unread Timeout</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Multi-Channel Fallback Flow
-                  </label>
-                  <select
-                    value={newSeqFallback}
-                    onChange={(e) => setNewSeqFallback(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 font-semibold outline-none focus:border-[#004ac6]"
-                  >
-                    <option value="WHATSAPP_TO_EMAIL">WhatsApp &rarr; 24h Fallback to Email</option>
-                    <option value="EMAIL_TO_WHATSAPP">Email &rarr; 2h Nudge to WhatsApp</option>
-                    <option value="WHATSAPP_EMAIL_SEQUENCE">WhatsApp &rarr; 48h Follow-up Email</option>
-                  </select>
+                  {newSeqTrigger === 'TAG_ADDED' && (
+                    <>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Which tag?</label>
+                      <input
+                        type="text"
+                        placeholder="Leave empty for any tag"
+                        value={triggerTag}
+                        onChange={(e) => setTriggerTag(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 font-semibold outline-none focus:border-[#004ac6]"
+                      />
+                    </>
+                  )}
+                  {newSeqTrigger === 'LIST_JOINED' && (
+                    <>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Which list?</label>
+                      <select
+                        value={triggerListId}
+                        onChange={(e) => setTriggerListId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 font-semibold outline-none focus:border-[#004ac6]"
+                      >
+                        <option value="">Any list</option>
+                        {lists.map((l) => (
+                          <option key={l.id} value={l.id}>{l.name}</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
                 </div>
               </div>
+
+              {/* Steps builder */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
+                <p className="font-bold text-slate-800 flex items-center gap-1.5 text-[11px]">
+                  <Layers className="h-3.5 w-3.5 text-[#004ac6]" />
+                  Steps (run in this order for each contact)
+                </p>
+
+                {builderSteps.map((st, index) => {
+                  const channel = st.type === 'SEND_EMAIL' ? 'EMAIL' : st.type === 'SEND_WHATSAPP' ? 'WHATSAPP' : null;
+                  const options = channel ? templates.filter((t) => t.channel === channel) : [];
+                  return (
+                    <div key={st.id} className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-500 w-5">{index + 1}.</span>
+                        <select
+                          aria-label={`Step ${index + 1} type`}
+                          value={st.type}
+                          onChange={(e) => updateStep(st.id, { type: e.target.value as BuilderStepType, templateId: '' })}
+                          className="flex-1 p-1.5 rounded-lg border border-slate-300 bg-white font-bold"
+                        >
+                          <option value="SEND_EMAIL">Send email</option>
+                          <option value="WAIT_DELAY">Wait</option>
+                          <option value="ADD_TAG">Add tag</option>
+                          <option value="SEND_WHATSAPP">Send WhatsApp</option>
+                        </select>
+                        <button type="button" onClick={() => moveStep(index, -1)} disabled={index === 0} className="px-2 py-1 rounded border border-slate-300 font-bold disabled:opacity-40" aria-label={`Move step ${index + 1} up`}>↑</button>
+                        <button type="button" onClick={() => moveStep(index, 1)} disabled={index === builderSteps.length - 1} className="px-2 py-1 rounded border border-slate-300 font-bold disabled:opacity-40" aria-label={`Move step ${index + 1} down`}>↓</button>
+                        <button type="button" onClick={() => removeStep(st.id)} disabled={builderSteps.length === 1} className="px-2 py-1 rounded border border-red-200 text-red-600 font-bold disabled:opacity-40" aria-label={`Remove step ${index + 1}`}>✕</button>
+                      </div>
+
+                      {channel && (
+                        <div className="grid grid-cols-2 gap-2 pl-7">
+                          <select
+                            aria-label={`Step ${index + 1} template`}
+                            value={st.templateId}
+                            onChange={(e) => updateStep(st.id, { templateId: e.target.value })}
+                            className="p-1.5 rounded-lg border border-slate-300 bg-white font-semibold"
+                          >
+                            <option value="">Choose a template…</option>
+                            {options.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                          {st.type === 'SEND_EMAIL' ? (
+                            <input
+                              type="text"
+                              aria-label={`Step ${index + 1} subject`}
+                              placeholder="Subject (empty = template subject)"
+                              value={st.subject}
+                              onChange={(e) => updateStep(st.id, { subject: e.target.value })}
+                              className="p-1.5 rounded-lg border border-slate-300 bg-white font-semibold"
+                            />
+                          ) : (
+                            <span />
+                          )}
+                          {options.length === 0 && (
+                            <p className="col-span-2 text-amber-700 font-semibold">
+                              No {channel === 'EMAIL' ? 'email' : 'WhatsApp'} templates yet. Create one under Templates first.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {st.type === 'WAIT_DELAY' && (
+                        <div className="flex items-center gap-2 pl-7">
+                          <input
+                            type="number"
+                            min={1}
+                            aria-label={`Step ${index + 1} wait hours`}
+                            value={st.delayHours}
+                            onChange={(e) => updateStep(st.id, { delayHours: Number(e.target.value) })}
+                            className="w-24 p-1.5 rounded-lg border border-slate-300 bg-white font-semibold"
+                          />
+                          <span className="text-slate-600 font-semibold">hours</span>
+                        </div>
+                      )}
+
+                      {st.type === 'ADD_TAG' && (
+                        <div className="pl-7">
+                          <input
+                            type="text"
+                            aria-label={`Step ${index + 1} tag name`}
+                            placeholder="Tag name"
+                            value={st.tagName}
+                            onChange={(e) => updateStep(st.id, { tagName: e.target.value })}
+                            className="w-full p-1.5 rounded-lg border border-slate-300 bg-white font-semibold"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => setBuilderSteps((prev) => [...prev, newBuilderStep(prev[prev.length - 1]?.type === 'WAIT_DELAY' ? 'SEND_EMAIL' : 'WAIT_DELAY')])}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-bold hover:bg-slate-50"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add step
+                </button>
+              </div>
+
+              {formError && (
+                <div className="p-2.5 rounded-lg border border-red-200 bg-red-50 text-red-700 font-semibold" role="alert">
+                  {formError}
+                </div>
+              )}
 
               {/* Safeguards: Frequency Capping & Quiet Hours */}
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5">

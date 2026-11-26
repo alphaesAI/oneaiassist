@@ -12,6 +12,7 @@ export class SendGridAdapter implements IEmailProviderAdapter {
     try {
       const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
+        signal: AbortSignal.timeout(30_000),
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${creds.apiKey}`,
@@ -20,17 +21,27 @@ export class SendGridAdapter implements IEmailProviderAdapter {
           personalizations: [{ to: [{ email: email.to }] }],
           from: { email: creds.fromEmail, name: creds.fromName },
           subject: email.subject,
+          ...(email.replyTo ? { reply_to: { email: email.replyTo } } : {}),
+          // Carries List-Unsubscribe and List-Unsubscribe-Post (RFC 8058)
+          ...(email.headers && Object.keys(email.headers).length > 0 ? { headers: email.headers } : {}),
           content: [
-            { type: 'text/html', value: email.html },
+            // SendGrid requires text/plain to come before text/html
             ...(email.text ? [{ type: 'text/plain', value: email.text }] : []),
+            { type: 'text/html', value: email.html },
           ],
         }),
       });
 
       const messageId = res.headers.get('x-message-id') || `sg_${Date.now()}`;
-      return { messageId, status: res.ok ? 'SENT' : 'FAILED' };
+      return {
+        messageId,
+        status: res.ok ? 'SENT' : 'FAILED',
+        httpStatus: res.status,
+        retryable: res.status === 429 || res.status >= 500,
+        ...(res.ok ? {} : { error: `SendGrid failed (${res.status})` }),
+      };
     } catch (err: any) {
-      return { messageId: '', status: 'FAILED', error: err.message };
+      return { messageId: '', status: 'FAILED', error: err.message, retryable: true };
     }
   }
 

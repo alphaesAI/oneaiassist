@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import assert from 'node:assert';
 import { EmailTrackingService } from '../lib/email/tracking';
 
@@ -19,15 +20,12 @@ async function testEmailTrackingAndWebhooks() {
   });
 
   assert.ok(trackingUrl.startsWith(`${appBaseUrl}/api/channels/email/track/click`), 'Tracking URL prefix is correct');
-  const parsedUrl = new URL(trackingUrl);
-  const dataParam = parsedUrl.searchParams.get('d')!;
-  const sigParam = parsedUrl.searchParams.get('s')!;
-  assert.ok(dataParam, 'Data payload parameter is present');
-  assert.ok(sigParam, 'HMAC signature parameter is present');
+  const tokenParam = new URL(trackingUrl).searchParams.get('token')!;
+  assert.ok(tokenParam, 'Signed token parameter is present');
   console.log('✓ Signed click tracking URL generated successfully');
 
   // 2. Decode and verify valid tracking payload
-  const decodedValid = EmailTrackingService.decodeTrackingPayload(dataParam, sigParam);
+  const decodedValid = EmailTrackingService.decodeTrackingPayload(tokenParam, 'click');
   assert.strictEqual(decodedValid.valid, true, 'Valid signature must decode successfully');
   assert.strictEqual(decodedValid.data?.tenantId, tenantId);
   assert.strictEqual(decodedValid.data?.campaignId, campaignId);
@@ -37,19 +35,22 @@ async function testEmailTrackingAndWebhooks() {
   console.log('✓ HMAC verification succeeds and preserves auto-tagged UTM parameters');
 
   // 3. Tamper detection: Invalid or tampered signature should be rejected
-  const tamperedSig = sigParam.slice(0, -4) + 'abcd';
-  const decodedTampered = EmailTrackingService.decodeTrackingPayload(dataParam, tamperedSig);
+  const tamperedToken = tokenParam.slice(0, -4) + (tokenParam.endsWith('abcd') ? 'wxyz' : 'abcd');
+  const decodedTampered = EmailTrackingService.decodeTrackingPayload(tamperedToken, 'click');
   assert.strictEqual(decodedTampered.valid, false, 'Tampered signature must be rejected');
   console.log('✓ Anti-tampering verified: Forged signature rejected');
 
   // 4. Open tracking pixel generation and verification
   const pixelUrl = EmailTrackingService.generateOpenTrackingPixelUrl(appBaseUrl, tenantId, campaignId, customerId);
   assert.ok(pixelUrl.startsWith(`${appBaseUrl}/api/channels/email/track/open`), 'Open tracking pixel prefix is correct');
-  const parsedPixel = new URL(pixelUrl);
-  const pixelData = parsedPixel.searchParams.get('d')!;
-  const pixelSig = parsedPixel.searchParams.get('s')!;
-  const decodedPixel = EmailTrackingService.decodeTrackingPayload(pixelData, pixelSig);
+  const pixelToken = new URL(pixelUrl).searchParams.get('token')!;
+  const decodedPixel = EmailTrackingService.decodeTrackingPayload(pixelToken, 'open');
   assert.strictEqual(decodedPixel.valid, true, 'Open pixel payload decodes and verifies successfully');
+  assert.strictEqual(
+    EmailTrackingService.decodeTrackingPayload(pixelToken, 'click').valid,
+    false,
+    'An open token must not be accepted as a click token'
+  );
   console.log('✓ Open tracking pixel signed and verified successfully');
 
   // 5. Test Complaint Rate Circuit Breaker logic

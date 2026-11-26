@@ -25,6 +25,8 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
+import { CampaignReportModal } from '@/components/email/CampaignReportModal';
+import AudienceManager from '@/components/email/AudienceManager';
 
 interface EmailDesign {
   headline: string;
@@ -65,10 +67,19 @@ interface EmailCampaign {
   optedOut: number;
   createdAt: string;
   template?: EmailTemplate | null;
+  liveJobs?: {
+    total: number;
+    pending: number;
+    sent: number;
+    failed: number;
+    skippedSuppressed: number;
+    skippedInvalid: number;
+    cancelled: number;
+  };
 }
 
-type HubTab = 'campaigns' | 'builder' | 'templates' | 'deliverability';
-type BuilderStep = 1 | 2 | 3 | 4;
+type HubTab = 'campaigns' | 'builder' | 'audience' | 'templates' | 'deliverability';
+type BuilderStep = 1 | 2 | 3 | 4 | 5;
 
 const DEFAULT_DESIGN: EmailDesign = {
   headline: 'Important Update for You',
@@ -168,9 +179,12 @@ export default function EmailMarketingHubPage() {
   const [isAbTest, setIsAbTest] = useState(false);
   const [abSubjectB, setAbSubjectB] = useState('');
   const [abSplit, setAbSplit] = useState(50);
+  const [abWinnerMetric, setAbWinnerMetric] = useState<'CLICKS' | 'OPENS'>('CLICKS');
+  const [abDurationHours, setAbDurationHours] = useState(4);
 
   // Audience state
-  const [recipientType, setRecipientType] = useState<'all' | 'tag' | 'stage' | 'email_engagement'>('all');
+  const [recipientType, setRecipientType] = useState<'all' | 'segment' | 'tag' | 'stage' | 'email_engagement'>('all');
+  const [selectedSegmentId, setSelectedSegmentId] = useState('');
   const [filterValue, setFilterValue] = useState('');
   const [emailActivity, setEmailActivity] = useState<'OPENED_LAST_30_DAYS' | 'CLICKED_ANY' | 'NEVER_BOUNCED'>('OPENED_LAST_30_DAYS');
 
@@ -194,6 +208,7 @@ export default function EmailMarketingHubPage() {
   const [tplDesign, setTplDesign] = useState<EmailDesign>(DEFAULT_DESIGN);
   const [showRawHtml, setShowRawHtml] = useState(false);
   const [customHtmlOverride, setCustomHtmlOverride] = useState('');
+  const [selectedReportCampaignId, setSelectedReportCampaignId] = useState<string | null>(null);
 
   const notify = (type: 'success' | 'error', text: string) => {
     setToast({ type, text });
@@ -218,6 +233,21 @@ export default function EmailMarketingHubPage() {
       if (!res.ok) throw new Error('Failed to load email campaigns');
       return res.json();
     },
+    refetchInterval: (query) => {
+      const data = query.state.data as EmailCampaign[] | undefined;
+      const hasActive = data?.some((c) => c.status === 'SENDING' || c.status === 'QUEUED');
+      return hasActive ? 3000 : false;
+    },
+  });
+
+  const { data: savedSegments = [] } = useQuery<{ id: string; name: string; description?: string }[]>({
+    queryKey: ['saved-segments'],
+    queryFn: async () => {
+      const res = await fetch('/api/segments');
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : (json.segments || []);
+    },
   });
 
   const { data: allTemplates = [], isLoading: loadingTemplates } = useQuery<EmailTemplate[]>({
@@ -241,14 +271,21 @@ export default function EmailMarketingHubPage() {
 
   // Audience preview count
   const { data: audiencePreview } = useQuery<{ recipientCount: number; optedOutCount?: number }>({
-    queryKey: ['email-audience-preview', recipientType, filterValue, emailActivity],
+    queryKey: ['email-audience-preview', recipientType, filterValue, emailActivity, selectedSegmentId],
     queryFn: async () => {
+      if (recipientType === 'segment') {
+        if (!selectedSegmentId) return { recipientCount: 0, optedOutCount: 0 };
+        const res = await fetch(`/api/segments/${selectedSegmentId}/count?channel=EMAIL`);
+        if (!res.ok) return { recipientCount: 0, optedOutCount: 0 };
+        const data = await res.json();
+        return { recipientCount: data.audienceCount || 0, optedOutCount: data.optedOutCount || 0 };
+      }
       const params = new URLSearchParams({
         preview: 'true',
         channel: 'EMAIL',
         type: recipientType,
         value: recipientType === 'email_engagement' ? emailActivity : filterValue,
-        emailActivity,
+        ...(recipientType === 'email_engagement' ? { emailActivity } : {}),
       });
       const res = await fetch(`/api/dashboard/broadcast?${params.toString()}`);
       if (!res.ok) return { recipientCount: 0, optedOutCount: 0 };
@@ -440,7 +477,10 @@ export default function EmailMarketingHubPage() {
           isAbTest,
           abSubjectB: isAbTest ? abSubjectB.trim() : undefined,
           abTestSplit: isAbTest ? abSplit : undefined,
-          recipientFilter: {
+          abWinnerMetric: isAbTest ? abWinnerMetric : undefined,
+          abDurationHours: isAbTest ? abDurationHours : undefined,
+          segmentId: recipientType === 'segment' ? selectedSegmentId : undefined,
+          recipientFilter: recipientType === 'segment' ? undefined : {
             type: recipientType,
             value: recipientType === 'email_engagement' ? emailActivity : filterValue,
             emailActivity: recipientType === 'email_engagement' ? emailActivity : undefined,
@@ -617,6 +657,7 @@ export default function EmailMarketingHubPage() {
         {[
           { id: 'campaigns', label: 'Campaigns & Analytics', icon: BarChart3 },
           { id: 'builder', label: 'Campaign Builder', icon: Send },
+          { id: 'audience', label: 'Audience', icon: Users },
           { id: 'templates', label: 'Email Templates', icon: LayoutTemplate },
           { id: 'deliverability', label: 'Quota & Deliverability', icon: ShieldCheck },
         ].map((tab) => {
@@ -713,40 +754,97 @@ export default function EmailMarketingHubPage() {
                       return (
                         <tr key={c.id} className="hover:bg-slate-50/70">
                           <td className="px-5 py-3.5">
-                            <p className="font-semibold text-slate-900">{c.name}</p>
-                            <p className="text-[11px] text-slate-500 truncate max-w-xs">
-                              {c.subject || c.template?.subject || 'No subject'}
-                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedReportCampaignId(c.id)}
+                              className="text-left group block"
+                            >
+                              <p className="font-semibold text-slate-900 group-hover:text-[#1B4B91] transition flex items-center gap-1.5">
+                                {c.name}
+                                <span className="opacity-0 group-hover:opacity-100 text-[10px] text-[#1B4B91] font-normal underline">
+                                  View Report →
+                                </span>
+                              </p>
+                              <p className="text-[11px] text-slate-500 truncate max-w-xs">
+                                {c.subject || c.template?.subject || 'No subject'}
+                              </p>
+                            </button>
                           </td>
                           <td className="px-4 py-3.5">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                c.status === 'COMPLETED'
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : c.status === 'QUEUED'
-                                  ? 'bg-blue-50 text-blue-700'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {c.status}
-                            </span>
+                            <div className="space-y-1">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
+                                  c.status === 'COMPLETED'
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : c.status === 'SENDING'
+                                    ? 'bg-amber-50 text-amber-700 animate-pulse'
+                                    : c.status === 'QUEUED'
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : c.status === 'PAUSED'
+                                    ? 'bg-purple-50 text-purple-700'
+                                    : c.status === 'FAILED'
+                                    ? 'bg-red-50 text-red-700'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {c.status === 'SENDING' && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping mr-0.5" />}
+                                {c.status}
+                              </span>
+                              {c.status === 'SENDING' && (c.liveJobs?.total || 0) > 0 && (
+                                <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                  <div
+                                    className="bg-amber-500 h-full rounded-full transition-all duration-300"
+                                    style={{ width: `${Math.min(100, Math.round(((c.liveJobs?.sent || 0) / (c.liveJobs?.total || 1)) * 100))}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3.5 font-medium text-slate-700">
-                            {c.sent} / {c.delivered}
+                            {c.status === 'SENDING' || c.status === 'QUEUED' ? (
+                              <span>
+                                {c.liveJobs?.sent ?? c.sent} / {c.liveJobs?.total ?? (c.sent + (c.liveJobs?.pending ?? 0))}
+                                {c.liveJobs?.total ? ` (${Math.round(((c.liveJobs.sent || 0) / c.liveJobs.total) * 100)}%)` : ''}
+                              </span>
+                            ) : (
+                              <span>{c.liveJobs?.sent ?? c.sent} / {c.delivered}</span>
+                            )}
                           </td>
                           <td className="px-4 py-3.5">
-                            <span className="font-semibold text-slate-800">{openPct}%</span>{' '}
-                            <span className="text-[11px] text-slate-400">({c.read})</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedReportCampaignId(c.id)}
+                              className="text-left hover:text-[#1B4B91] transition"
+                              title="Click to view opens breakdown"
+                            >
+                              <span className="font-semibold text-slate-800 hover:text-[#1B4B91]">{openPct}%</span>{' '}
+                              <span className="text-[11px] text-slate-400">({c.read})</span>
+                            </button>
                           </td>
                           <td className="px-4 py-3.5">
-                            <span className="font-semibold text-slate-800">{clickPct}%</span>{' '}
-                            <span className="text-[11px] text-slate-400">({c.replied})</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedReportCampaignId(c.id)}
+                              className="text-left hover:text-[#1B4B91] transition"
+                              title="Click to view clicks breakdown"
+                            >
+                              <span className="font-semibold text-slate-800 hover:text-[#1B4B91]">{clickPct}%</span>{' '}
+                              <span className="text-[11px] text-slate-400">({c.replied})</span>
+                            </button>
                           </td>
                           <td className="px-4 py-3.5 text-slate-500">
                             {new Date(c.createdAt).toLocaleDateString()}
                           </td>
                           <td className="px-4 py-3.5 text-right">
                             <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                title="View Detailed Campaign Report"
+                                onClick={() => setSelectedReportCampaignId(c.id)}
+                                className="p-1.5 text-slate-400 hover:text-[#1B4B91] hover:bg-slate-100 rounded transition"
+                              >
+                                <BarChart3 className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 type="button"
                                 title="Duplicate Campaign"
@@ -758,7 +856,7 @@ export default function EmailMarketingHubPage() {
                                   setActiveTab('builder');
                                   setBuilderStep(1);
                                 }}
-                                className="p-1.5 text-slate-400 hover:text-[#1B4B91] rounded"
+                                className="p-1.5 text-slate-400 hover:text-[#1B4B91] hover:bg-slate-100 rounded transition"
                               >
                                 <Copy className="w-3.5 h-3.5" />
                               </button>
@@ -766,7 +864,7 @@ export default function EmailMarketingHubPage() {
                                 type="button"
                                 title="Delete Campaign"
                                 onClick={() => deleteCampaignMutation.mutate(c.id)}
-                                className="p-1.5 text-slate-400 hover:text-red-600 rounded"
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -783,15 +881,16 @@ export default function EmailMarketingHubPage() {
         </div>
       )}
 
-      {/* TAB 2: 4-STEP CAMPAIGN BUILDER */}
+      {/* TAB 2: 5-STEP CAMPAIGN BUILDER */}
       {activeTab === 'builder' && (
         <div className="space-y-5">
           <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-3">
             {[
-              { step: 1, title: '1. Setup & Subject' },
+              { step: 1, title: '1. Details' },
               { step: 2, title: '2. Audience' },
-              { step: 3, title: '3. Content & Test' },
-              { step: 4, title: '4. Pre-Flight & Launch' },
+              { step: 3, title: '3. Content' },
+              { step: 4, title: '4. Review' },
+              { step: 5, title: '5. Schedule' },
             ].map((s, i) => (
               <React.Fragment key={s.step}>
                 <button
@@ -808,7 +907,7 @@ export default function EmailMarketingHubPage() {
                   {builderStep > s.step && <CheckCircle2 className="w-3.5 h-3.5" />}
                   {s.title}
                 </button>
-                {i < 3 && <ChevronRight className="w-4 h-4 text-slate-300 hidden sm:block" />}
+                {i < 4 && <ChevronRight className="w-4 h-4 text-slate-300 hidden sm:block" />}
               </React.Fragment>
             ))}
           </div>
@@ -898,7 +997,7 @@ export default function EmailMarketingHubPage() {
                   </label>
 
                   {isAbTest && (
-                    <div className="mt-3 p-3.5 bg-purple-50/60 border border-purple-100 rounded-lg space-y-3">
+                    <div className="mt-3 p-3.5 bg-purple-50/60 border border-purple-100 rounded-lg space-y-3.5">
                       <div>
                         <label className="block text-xs font-semibold text-purple-900 mb-1">Variant B Subject Line</label>
                         <input
@@ -909,17 +1008,61 @@ export default function EmailMarketingHubPage() {
                           className="w-full px-3 py-2 text-xs border border-purple-200 rounded-lg bg-white"
                         />
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-purple-900">
-                        <span className="font-semibold">Split: {abSplit}% A / {100 - abSplit}% B</span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="block text-xs font-semibold text-purple-900 mb-1">Determine Winner By</label>
+                          <select
+                            value={abWinnerMetric}
+                            onChange={(e) => setAbWinnerMetric(e.target.value as 'CLICKS' | 'OPENS')}
+                            className="w-full px-3 py-2 text-xs border border-purple-200 rounded-lg bg-white text-purple-950 font-medium"
+                          >
+                            <option value="CLICKS">Highest Click Rate (Clicks / Delivered)</option>
+                            <option value="OPENS">Highest Open Rate (Opens / Delivered)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-purple-900 mb-1">Test Duration Before Rollout</label>
+                          <select
+                            value={abDurationHours}
+                            onChange={(e) => setAbDurationHours(Number(e.target.value))}
+                            className="w-full px-3 py-2 text-xs border border-purple-200 rounded-lg bg-white text-purple-950 font-medium"
+                          >
+                            <option value={1}>1 hour</option>
+                            <option value={2}>2 hours</option>
+                            <option value={4}>4 hours (Recommended)</option>
+                            <option value={8}>8 hours</option>
+                            <option value={24}>24 hours</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between text-xs text-purple-900">
+                          <span className="font-semibold">Audience Test Portion: {abSplit}%</span>
+                          <span className="text-[11px] text-purple-700">
+                            {abSplit === 100
+                              ? '50% Variant A / 50% Variant B (No remainder)'
+                              : `${Math.round(abSplit / 2)}% A / ${Math.round(abSplit / 2)}% B (Remaining ${100 - abSplit}% held for winner)`}
+                          </span>
+                        </div>
                         <input
                           type="range"
-                          min={10}
-                          max={90}
+                          min={20}
+                          max={100}
                           step={10}
                           value={abSplit}
                           onChange={(e) => setAbSplit(Number(e.target.value))}
-                          className="w-40"
+                          className="w-full accent-purple-600"
                         />
+                        <p className="text-[11px] text-purple-800 leading-relaxed bg-white/70 p-2 rounded border border-purple-100">
+                          Variant A and B will each be dispatched to {Math.round(abSplit / 2)}% of recipients immediately.
+                          {abSplit < 100 ? (
+                            <> After {abDurationHours} hour{abDurationHours > 1 ? 's' : ''}, the winning variant (by {abWinnerMetric === 'CLICKS' ? 'click rate' : 'open rate'}) will automatically be dispatched to the remaining {100 - abSplit}% of subscribers.</>
+                          ) : (
+                            <> Since 100% of the audience is in the test, winner analytics will be finalized once all sends complete.</>
+                          )}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -956,8 +1099,9 @@ export default function EmailMarketingHubPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {[
+                  { id: 'segment', title: 'Saved Segment', desc: 'Target contacts via saved dynamic rule trees' },
                   { id: 'all', title: 'All Email Subscribers', desc: 'All active contacts with a valid email' },
                   { id: 'tag', title: 'Filter by CRM Tag', desc: 'Target specific customer tags' },
                   { id: 'stage', title: 'Filter by Pipeline Stage', desc: 'e.g., NEW, QUALIFIED, PROPOSAL' },
@@ -978,6 +1122,30 @@ export default function EmailMarketingHubPage() {
                   </button>
                 ))}
               </div>
+
+              {recipientType === 'segment' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Select Saved Segment</label>
+                  {savedSegments.length === 0 ? (
+                    <div className="p-3 bg-slate-50 rounded-lg border border-dashed border-slate-300 text-xs text-slate-500">
+                      No saved segments found. You can create segments under Contacts &gt; Segments, or select &quot;All Email Subscribers&quot;.
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedSegmentId}
+                      onChange={(e) => setSelectedSegmentId(e.target.value)}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+                    >
+                      <option value="">-- Choose a saved segment --</option>
+                      {savedSegments.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} {s.description ? `— ${s.description}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
 
               {(recipientType === 'tag' || recipientType === 'stage') && (
                 <div>
@@ -1127,7 +1295,7 @@ export default function EmailMarketingHubPage() {
                     onClick={() => setBuilderStep(4)}
                     className="px-4 py-2 bg-[#1B4B91] text-white text-xs font-semibold rounded-lg"
                   >
-                    Next: Review &amp; Send →
+                    Next: Review Checklist →
                   </button>
                 </div>
               </div>
@@ -1171,6 +1339,7 @@ export default function EmailMarketingHubPage() {
                       title="Email Preview"
                       srcDoc={renderedPreviewHtml}
                       className="w-full min-h-[420px] border-0"
+                      sandbox="allow-same-origin"
                     />
                   </div>
                 </div>
@@ -1178,38 +1347,143 @@ export default function EmailMarketingHubPage() {
             </div>
           )}
 
-          {/* Step 4: Pre-Flight & Launch */}
+          {/* Step 4: Pre-Flight Review Checklist */}
           {builderStep === 4 && (
             <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5 max-w-3xl">
-              <h2 className="text-base font-bold text-slate-900">Pre-Flight Checklist &amp; Launch</h2>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Pre-Flight Review &amp; Checklist</h2>
+                <p className="text-xs text-slate-500">
+                  Verify critical deliverability requirements before scheduling your campaign.
+                </p>
+              </div>
 
               <div className="space-y-2.5 text-xs">
                 {[
-                  { ok: !!emailConfig?.configured, label: 'Resend Email Provider Configured' },
-                  { ok: hasVerifiedDomain && senderMatchesDomain, label: 'Verified Sending Domain Matches Sender Email' },
-                  { ok: !!campaignName.trim() && !!subject.trim(), label: `Subject Line Set: "${subject || 'Missing'}"` },
-                  { ok: !!selectedTemplateId, label: `Template Selected: ${selectedTemplate?.name || 'None selected'}` },
+                  {
+                    ok: !!emailConfig?.configured,
+                    label: 'Email Provider Configured',
+                    desc: emailConfig?.configured
+                      ? `Connected to ${emailConfig.provider} provider`
+                      : 'Missing email provider credentials. Configure in Settings > Email.',
+                  },
+                  {
+                    ok: hasVerifiedDomain && senderMatchesDomain,
+                    label: 'Verified Sending Domain',
+                    desc: hasVerifiedDomain && senderMatchesDomain
+                      ? `From address domain is verified via DKIM/SPF DNS`
+                      : `Sender email (${emailConfig?.fromEmail || 'none'}) does not match a verified sending domain.`,
+                  },
+                  {
+                    ok: !!subject.trim(),
+                    label: 'Subject Line Set',
+                    desc: subject.trim() ? `Subject: "${subject}"` : 'Missing email subject line.',
+                  },
+                  {
+                    ok: !!selectedTemplateId,
+                    label: 'Content Template Selected',
+                    desc: selectedTemplate ? `Template: ${selectedTemplate.name}` : 'No email template selected.',
+                  },
                   {
                     ok: (audiencePreview?.recipientCount ?? 0) > 0 && !quotaExceeded,
-                    label: quotaExceeded
-                      ? `Daily Quota Exceeded: ${audiencePreview?.recipientCount ?? 0} recipients > ${remainingToday} remaining today`
-                      : `Target Audience: ${audiencePreview?.recipientCount ?? 0} recipients (${remainingToday} daily quota remaining)`,
+                    label: 'Audience Available & Within Quota',
+                    desc: quotaExceeded
+                      ? `Exceeds quota: ${audiencePreview?.recipientCount ?? 0} recipients > ${remainingToday} daily quota remaining`
+                      : `Target audience: ${audiencePreview?.recipientCount ?? 0} valid subscribers (${remainingToday} remaining quota today)`,
                   },
+                  {
+                    ok: true,
+                    label: 'Compliance Footer & Unsubscribe Included',
+                    desc: 'Physical postal address and working one-click unsubscribe links are automatically injected into every email before sending.',
+                  },
+                  ...(isAbTest
+                    ? [
+                        {
+                          ok: !!abSubjectB.trim(),
+                          label: 'A/B Testing Configuration',
+                          desc: abSubjectB.trim()
+                            ? `Testing Variant A vs Variant B across ${abSplit}% test audience (${abDurationHours}h window evaluated by ${abWinnerMetric})`
+                            : 'Variant B subject line is empty. Please enter Variant B subject in Step 1.',
+                        },
+                      ]
+                    : []),
                 ].map((chk, i) => (
-                  <div key={i} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-100">
                     {chk.ok ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     ) : (
-                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                     )}
-                    <span className={chk.ok ? 'text-slate-800 font-medium' : 'text-amber-800 font-medium'}>
-                      {chk.label}
-                    </span>
+                    <div>
+                      <span className={chk.ok ? 'text-slate-900 font-semibold' : 'text-amber-900 font-semibold'}>
+                        {chk.label}
+                      </span>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{chk.desc}</p>
+                    </div>
                   </div>
                 ))}
               </div>
 
-              <div className="pt-3 border-t border-slate-100 space-y-3">
+              <div className="flex justify-between pt-3">
+                <button
+                  type="button"
+                  onClick={() => setBuilderStep(3)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  ← Back to Content
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBuilderStep(5)}
+                  className="px-4 py-2 bg-[#1B4B91] text-white text-xs font-semibold rounded-lg"
+                >
+                  Next: Schedule &amp; Launch →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Schedule & Launch */}
+          {builderStep === 5 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5 max-w-3xl">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Campaign Schedule &amp; Final Launch</h2>
+                <p className="text-xs text-slate-500">Choose when this campaign should begin dispatching to recipients.</p>
+              </div>
+
+              {/* Campaign Summary Card */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5 text-xs">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Campaign Summary</p>
+                <div className="grid grid-cols-2 gap-3 text-slate-700">
+                  <div>
+                    <span className="text-slate-400">Campaign Name:</span>
+                    <p className="font-semibold text-slate-900">{campaignName || 'Untitled Campaign'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Sender:</span>
+                    <p className="font-semibold text-slate-900">{emailConfig?.fromName} &lt;{emailConfig?.fromEmail}&gt;</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Subject:</span>
+                    <p className="font-semibold text-slate-900">{subject || '(No subject)'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Audience:</span>
+                    <p className="font-semibold text-slate-900">{audiencePreview?.recipientCount ?? 0} recipients</p>
+                  </div>
+                  {isAbTest && (
+                    <div className="col-span-2 pt-2 border-t border-slate-200">
+                      <span className="text-purple-700 font-bold flex items-center gap-1">
+                        <FlaskConical className="w-3.5 h-3.5 text-purple-600" /> A/B Split Test Enabled
+                      </span>
+                      <p className="text-slate-700 mt-0.5">
+                        Variant A: &quot;{subject}&quot; vs Variant B: &quot;{abSubjectB}&quot; &bull; {abSplit}% test split &bull; Evaluated by {abWinnerMetric} after {abDurationHours}h
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
                 <p className="text-xs font-semibold text-slate-700">Delivery Schedule</p>
                 <div className="flex gap-3">
                   <button
@@ -1253,16 +1527,16 @@ export default function EmailMarketingHubPage() {
               <div className="flex justify-between pt-3">
                 <button
                   type="button"
-                  onClick={() => setBuilderStep(3)}
+                  onClick={() => setBuilderStep(4)}
                   className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
                 >
-                  ← Back
+                  ← Back to Review
                 </button>
                 <button
                   type="button"
                   onClick={() => launchCampaignMutation.mutate()}
-                  disabled={launchCampaignMutation.isPending}
-                  className="px-5 py-2.5 bg-[#1B4B91] hover:bg-[#153a72] text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-2"
+                  disabled={launchCampaignMutation.isPending || !subject.trim() || !selectedTemplateId || (audiencePreview?.recipientCount ?? 0) === 0}
+                  className="px-5 py-2.5 bg-[#1B4B91] hover:bg-[#153a72] disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-2"
                 >
                   <Send className="w-3.5 h-3.5" />
                   {launchCampaignMutation.isPending
@@ -1278,6 +1552,8 @@ export default function EmailMarketingHubPage() {
       )}
 
       {/* TAB 3: EMAIL TEMPLATES */}
+      {activeTab === 'audience' && <AudienceManager />}
+
       {activeTab === 'templates' && (
         <div className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1331,6 +1607,7 @@ export default function EmailMarketingHubPage() {
                       title={tpl.name}
                       srcDoc={tpl.htmlBody || tpl.body}
                       className="w-[200%] h-[200%] origin-top-left scale-50 border-0"
+                      sandbox="allow-same-origin"
                     />
                   </div>
                   <div className="p-4 flex-1 flex flex-col justify-between gap-3">
@@ -1636,10 +1913,11 @@ export default function EmailMarketingHubPage() {
                     title="Template Live Preview"
                     srcDoc={(showRawHtml && customHtmlOverride ? customHtmlOverride : buildHtmlFromDesign(tplDesign))
                       .replace(/\{\{first_name[^}]*\}\}/g, 'Alex')
-                      .replace(/\{\{policy_number[^}]*\}\}/g, 'POL-99281')
+                      .replace(/\{\{policy_number[^}]*\}\}/g, 'POL-10001')
                       .replace(/\{\{sender_address[^}]*\}\}/g, emailConfig?.fromName || 'OneAI Assist')
                       .replace(/\{\{unsubscribe_url[^}]*\}\}/g, '#')}
                     className="w-full h-full min-h-[380px] border-0"
+                    sandbox="allow-same-origin"
                   />
                 </div>
               </div>
@@ -1665,6 +1943,13 @@ export default function EmailMarketingHubPage() {
           </div>
         </div>
       )}
+
+      {/* CAMPAIGN DETAILED REPORT & CONTACT DRILLDOWN MODAL */}
+      <CampaignReportModal
+        campaignId={selectedReportCampaignId}
+        isOpen={!!selectedReportCampaignId}
+        onClose={() => setSelectedReportCampaignId(null)}
+      />
     </div>
   );
 }

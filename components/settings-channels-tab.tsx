@@ -114,6 +114,8 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
   const [emailFromName, setEmailFromName] = useState('');
   const [emailFromEmail, setEmailFromEmail] = useState('');
   const [emailReplyTo, setEmailReplyTo] = useState('');
+  const [emailPostalAddress, setEmailPostalAddress] = useState('');
+  const [emailWebhookSecret, setEmailWebhookSecret] = useState('');
   const [emailDailyQuota, setEmailDailyQuota] = useState(1000);
   const [emailHourlyRate, setEmailHourlyRate] = useState(100);
   const [emailSaveSuccess, setEmailSaveSuccess] = useState(false);
@@ -180,6 +182,7 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
       if (emailConfigData.fromName) setEmailFromName(emailConfigData.fromName);
       if (emailConfigData.fromEmail) setEmailFromEmail(emailConfigData.fromEmail);
       if (emailConfigData.replyToEmail) setEmailReplyTo(emailConfigData.replyToEmail);
+      if (emailConfigData.postalAddress) setEmailPostalAddress(emailConfigData.postalAddress);
       if (emailConfigData.dailySendQuota) setEmailDailyQuota(emailConfigData.dailySendQuota);
       if (emailConfigData.hourlySendRate) setEmailHourlyRate(emailConfigData.hourlySendRate);
     }
@@ -198,6 +201,9 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
           fromName: emailFromName,
           fromEmail: emailFromEmail,
           replyToEmail: emailReplyTo,
+          postalAddress: emailPostalAddress,
+          // Only sent when a new secret was typed, so saving the form never wipes the stored one.
+          ...(emailWebhookSecret.trim() ? { webhookSecret: emailWebhookSecret.trim() } : {}),
           dailySendQuota: emailDailyQuota,
           hourlySendRate: emailHourlyRate,
         }),
@@ -1839,6 +1845,51 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
               placeholder="e.g. support@apexinsurance.com"
               className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6]"
             />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="email-postal-address" className="block text-xs font-semibold text-gray-700 mb-1">
+              Business Postal Address
+            </label>
+            <textarea
+              id="email-postal-address"
+              rows={3}
+              value={emailPostalAddress}
+              onChange={(e) => setEmailPostalAddress(e.target.value)}
+              placeholder="Street, city, state, postal code, country"
+              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6]"
+            />
+            <p className="text-[11px] text-gray-500 mt-1">
+              Required by anti-spam law. It is printed in the footer of every marketing email, and campaigns cannot be sent without it.
+            </p>
+          </div>
+          <div>
+            <label htmlFor="email-webhook-secret" className="block text-xs font-semibold text-gray-700 mb-1">
+              Webhook Signing Secret
+              <span className={`ml-2 font-semibold ${emailConfigData?.webhookSecretConfigured ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {emailConfigData?.webhookSecretConfigured ? 'Saved' : 'Not set'}
+              </span>
+            </label>
+            <input
+              id="email-webhook-secret"
+              type="password"
+              autoComplete="off"
+              value={emailWebhookSecret}
+              onChange={(e) => setEmailWebhookSecret(e.target.value)}
+              placeholder={emailConfigData?.webhookSecretConfigured ? 'Leave empty to keep the saved secret' : 'Paste the signing secret from your email provider'}
+              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:border-[#004ac6]"
+            />
+            <p className="text-[11px] text-gray-500 mt-1">
+              Needed for delivered, bounce and complaint reports. In your provider&apos;s webhook settings, use this address:
+            </p>
+            {emailConfigData?.webhookPath && (
+              <code className="block mt-1 px-2 py-1 bg-gray-50 border border-gray-200 rounded text-[11px] text-gray-700 break-all">
+                {typeof window !== 'undefined' ? window.location.origin : ''}
+                {emailConfigData.webhookPath}
+              </code>
+            )}
           </div>
         </div>
 

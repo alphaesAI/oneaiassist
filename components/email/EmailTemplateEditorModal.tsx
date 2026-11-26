@@ -642,6 +642,7 @@ export function EmailTemplateEditorModal({
                   title="Email Preview"
                   srcDoc={renderHtml()}
                   className="w-full h-[600px] border-0"
+                  sandbox="allow-same-origin"
                 />
               </div>
             </div>

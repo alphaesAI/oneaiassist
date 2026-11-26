@@ -8,17 +8,77 @@ export interface MergeContext {
   [key: string]: any;
 }
 
+export interface RenderOptions {
+  escapeHtml?: boolean;
+}
+
+export interface DetailedRenderResult {
+  rendered: string;
+  missingTags: string[];
+}
+
+export function escapeHtml(str: any): string {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export class EmailTemplateEngine {
   /**
-   * Render HTML and plain text with merge tag resolution and conditional blocks.
+   * Escape HTML entities in a string.
+   */
+  static escapeHtml(str: any): string {
+    return escapeHtml(str);
+  }
+
+  /**
+   * Sanitise template HTML on save to prevent stored XSS (SEC-21).
+   * Strips <script> tags, iframe/embed/object tags, inline event handlers, and javascript: URIs.
+   */
+  static sanitizeHtml(html: string): string {
+    if (!html) return '';
+
+    let sanitized = html;
+
+    // 1. Remove script tags and their content
+    sanitized = sanitized.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, '');
+    sanitized = sanitized.replace(/<script\b[^>]*\/>/gi, '');
+
+    // 2. Remove dangerous frame/object tags
+    sanitized = sanitized.replace(/<(iframe|embed|object|frame|frameset)\b[^>]*>([\s\S]*?)<\/\1>/gi, '');
+    sanitized = sanitized.replace(/<(iframe|embed|object|frame|frameset)\b[^>]*\/?>/gi, '');
+
+    // 3. Remove inline event handlers (e.g. onload, onerror, onclick)
+    sanitized = sanitized.replace(/\s+on[a-zA-Z]+\s*=\s*(?:["'][^"']*["']|[^\s>]+)/gi, '');
+
+    // 4. Remove javascript: pseudo-protocol URIs
+    sanitized = sanitized.replace(/(href|src|action|formaction|data)\s*=\s*(?:["']\s*javascript:[^"']*["']|javascript:[^\s>]+)/gi, '$1="#"');
+
+    return sanitized;
+  }
+
+  /**
+   * Render template with detailed report of rendered content and missing required tags.
    * Syntax supported:
    * 1. {{key | "default_value"}} or {{key}}
    * 2. {{#if key}} content {{/if}} or {{#if key}} content {{else}} fallback {{/if}}
+   *
+   * Values substituted into HTML content are HTML-escaped by default (MKT-12).
+   * Missing tags without author fallback are captured in missingTags (MKT-05).
    */
-  static render(content: string, context: MergeContext = {}): string {
-    if (!content) return '';
+  static renderDetailed(
+    content: string,
+    context: MergeContext = {},
+    options: RenderOptions = { escapeHtml: true }
+  ): DetailedRenderResult {
+    if (!content) return { rendered: '', missingTags: [] };
 
     let output = content;
+    const shouldEscape = options.escapeHtml !== false;
 
     // 1. Process conditional blocks: {{#if condition}}...{{else}}...{{/if}}
     const ifElseRegex = /\{\{#if\s+([a-zA-Z0-9_]+)\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g;
@@ -38,17 +98,73 @@ export class EmailTemplateEngine {
     const fallbackRegex = /\{\{\s*([a-zA-Z0-9_]+)\s*\|\s*["']([^"']*)["']\s*\}\}/g;
     output = output.replace(fallbackRegex, (_, key, fallback) => {
       const val = context[key];
-      return val !== undefined && val !== null && String(val).trim() !== '' ? String(val) : fallback;
+      const hasVal = val !== undefined && val !== null && String(val).trim() !== '';
+      const finalVal = hasVal ? String(val) : fallback;
+      return shouldEscape ? escapeHtml(finalVal) : finalVal;
     });
 
     // 4. Process standard merge tags: {{key}}
+    const missingSet = new Set<string>();
     const tagRegex = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
     output = output.replace(tagRegex, (_, key) => {
       const val = context[key];
-      return val !== undefined && val !== null ? String(val) : '';
+      const hasVal = val !== undefined && val !== null && String(val).trim() !== '';
+      if (!hasVal) {
+        missingSet.add(key);
+        return '';
+      }
+      return shouldEscape ? escapeHtml(val) : String(val);
     });
 
-    return output;
+    return {
+      rendered: output,
+      missingTags: Array.from(missingSet),
+    };
+  }
+
+  /**
+   * Render HTML or plain text with merge tag resolution and conditional blocks.
+   */
+  static render(
+    content: string,
+    context: MergeContext = {},
+    options: RenderOptions = {}
+  ): string {
+    return this.renderDetailed(content, context, options).rendered;
+  }
+
+  /**
+   * Append mandatory compliance footer containing physical postal address and working unsubscribe link (MKT-06).
+   */
+  static appendComplianceFooter(
+    html: string,
+    params: {
+      unsubscribeUrl: string;
+      postalAddress: string;
+      tenantName?: string;
+    }
+  ): string {
+    const { unsubscribeUrl, postalAddress, tenantName } = params;
+    const name = tenantName || 'Our Organization';
+
+    const footerHtml = `
+<div class="system-compliance-footer" style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 1.6; color: #64748b; text-align: center;">
+  <p style="margin: 0 0 6px 0;">
+    Sent by <strong>${escapeHtml(name)}</strong><br />
+    ${escapeHtml(postalAddress)}
+  </p>
+  <p style="margin: 0;">
+    If you no longer wish to receive these emails, you can <a href="${escapeHtml(unsubscribeUrl)}" style="color: #475569; text-decoration: underline;">unsubscribe here</a>.
+  </p>
+</div>`;
+
+    if (!html) return footerHtml.trim();
+
+    if (/<\/body>/i.test(html)) {
+      return html.replace(/<\/body>/i, `${footerHtml}\n</body>`);
+    }
+
+    return `${html}\n${footerHtml}`;
   }
 
   /**

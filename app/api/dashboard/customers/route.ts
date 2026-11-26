@@ -10,8 +10,26 @@ export async function GET() {
 
     const customers = await db.customer.findMany({
       where: { tenantId },
-      include: {
+      select: {
+        id: true,
+        tenantId: true,
+        displayName: true,
+        primaryPhone: true,
+        email: true,
+        tags: true,
+        location: true,
+        otpVerified: true,
+        optedIn: true,
+        optedInAt: true,
+        optedOutAt: true,
+        emailConsentStatus: true,
+        emailConsentSource: true,
+        emailConsentTimestamp: true,
+        emailConsentProof: true,
+        customFields: true,
+        activePolicyId: true,
         activePolicy: true,
+        createdAt: true,
       },
       orderBy: { displayName: 'asc' },
     });

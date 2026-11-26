@@ -3,22 +3,15 @@ import { IEmailProviderAdapter, OutboundEmail, EmailProviderCredentials, EmailSe
 export class SmtpProviderAdapter implements IEmailProviderAdapter {
   readonly providerName = 'SMTP';
 
-  async send(email: OutboundEmail, creds: EmailProviderCredentials): Promise<EmailSendResult> {
-    console.log(`[SmtpAdapter] Dispatching to ${email.to} via SMTP ${creds.host || 'localhost'}:${creds.port || 587}`);
+  async send(_email: OutboundEmail, _creds: EmailProviderCredentials): Promise<EmailSendResult> {
     return {
-      messageId: `smtp_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-      status: 'SENT',
+      messageId: '',
+      status: 'FAILED',
+      error: 'SMTP transport is not enabled. Please select Resend in Settings → Email Provider Configuration.',
     };
   }
 
-  async verifyDomain(domain: string, _creds: EmailProviderCredentials): Promise<DomainStatusResult> {
-    return {
-      domain,
-      status: 'VERIFIED',
-      records: [
-        { record: 'SPF', name: domain, type: 'TXT', value: 'v=spf1 mx ~all', status: 'VERIFIED' },
-        { record: 'DMARC', name: `_dmarc.${domain}`, type: 'TXT', value: 'v=DMARC1; p=none;', status: 'VERIFIED' },
-      ],
-    };
+  async verifyDomain(_domain: string, _creds: EmailProviderCredentials): Promise<DomainStatusResult> {
+    throw new Error('Domain verification is not supported for SMTP. Please select Resend in Settings.');
   }
 }

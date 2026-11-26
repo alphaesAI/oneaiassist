@@ -5,18 +5,22 @@ console.log('🚀 [OneAI] Launching Next.js on port 3000 and WhatsApp Engine on 
 
 const nextBin = path.join(__dirname, '..', 'node_modules', 'next', 'dist', 'bin', 'next');
 const serverPath = path.join(__dirname, '..', 'whatsapp-engine', 'server.ts');
+const workerPath = path.join(__dirname, '..', 'worker', 'index.ts');
 
 const next = spawn(process.execPath, [nextBin, 'dev'], { stdio: 'inherit' });
 const wa = spawn(process.execPath, ['--import', 'tsx', serverPath], { stdio: 'inherit' });
+const worker = spawn(process.execPath, ['--import', 'tsx', workerPath], { stdio: 'inherit' });
 
 process.on('SIGINT', () => {
   try { next.kill(); } catch {}
   try { wa.kill(); } catch {}
+  try { worker.kill('SIGINT'); } catch {}
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   try { next.kill(); } catch {}
   try { wa.kill(); } catch {}
+  try { worker.kill('SIGTERM'); } catch {}
   process.exit(0);
 });
