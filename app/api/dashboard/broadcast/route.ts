@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
 import { sendWhatsAppMessage } from '@/lib/whatsapp';
+import { CampaignService } from '@/lib/email/campaignService';
 
 function buildDateFilter(start?: string | null, end?: string | null) {
   let gte: Date | undefined;
@@ -65,7 +66,7 @@ export async function GET(req: Request) {
       const filter: any = {
         type: type === 'email_engagement' ? 'email_engagement' : type,
         value: type === 'date_range' ? { start, end } : value,
-        emailActivity: emailActivity || (type === 'email_engagement' ? (value as any) : undefined),
+        emailActivity: type === 'email_engagement' ? (emailActivity || (value as any)) : undefined,
       };
 
       const { audienceCount, optedOutCount } = await SegmentationService.countSegmentAudience(
@@ -78,18 +79,8 @@ export async function GET(req: Request) {
     }
 
     const channelFilter = url.searchParams.get('channel');
-    const where: any = { tenantId };
-    if (channelFilter && channelFilter !== 'ALL') {
-      where.channel = channelFilter;
-    }
-
-    const campaigns = await db.broadcastCampaign.findMany({
-      where,
-      include: { template: true },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return NextResponse.json(campaigns);
+    const result = await CampaignService.listCampaignsWithLiveJobs(tenantId, channelFilter);
+    return NextResponse.json(result);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unauthorized';
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -106,6 +97,7 @@ export async function POST(req: Request) {
       name,
       channel = 'WHATSAPP',
       templateId,
+      segmentId,
       recipientFilter,
       scheduledAt,
       subject,
@@ -122,15 +114,39 @@ export async function POST(req: Request) {
       abDurationHours = 4,
     } = body;
 
-    if (!name || !templateId || !recipientFilter) {
+    if (!name || !templateId || (!recipientFilter && !segmentId)) {
       return NextResponse.json(
-        { error: 'Campaign name, template ID, and recipient filters are required' },
+        { error: 'Campaign name, template ID, and recipient filters or segment ID are required' },
         { status: 400 }
       );
     }
 
-    // 0. Auto-pause deliverability circuit breaker check
+    let resolvedSegment = null;
+    if (segmentId) {
+      resolvedSegment = await db.segment.findUnique({
+        where: { id: segmentId, tenantId },
+      });
+      if (!resolvedSegment) {
+        return NextResponse.json({ error: 'Segment not found' }, { status: 404 });
+      }
+    }
+
+    // 0. Auto-pause & Idempotency-Key check for EMAIL
+    const idempotencyKey = req.headers.get('idempotency-key')?.trim() || null;
     if (channel === 'EMAIL') {
+      if (idempotencyKey) {
+        const existing = await db.broadcastCampaign.findFirst({
+          where: {
+            tenantId,
+            idempotencyKey,
+            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          },
+        });
+        if (existing) {
+          return NextResponse.json(existing, { status: 202 });
+        }
+      }
+
       const emailConfig = await db.tenantEmailConfig.findUnique({ where: { tenantId } });
       if (emailConfig?.isAutoPaused) {
         return NextResponse.json(
@@ -148,6 +164,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
 
+    // Pre-send checks for email, enforced here so they cannot be skipped by calling the API directly.
+    if (channel === 'EMAIL') {
+      const problems: string[] = [];
+      if (!String(subject || template.subject || '').trim()) problems.push('The email needs a subject line.');
+      if (!String(template.htmlBody || template.body || '').trim()) problems.push('The email template has no content.');
+      const [tenantRow, configRow] = await Promise.all([
+        db.tenant.findUnique({ where: { id: tenantId }, select: { postalAddress: true } }),
+        db.tenantEmailConfig.findUnique({ where: { tenantId }, select: { postalAddress: true } }),
+      ]);
+      if (!tenantRow?.postalAddress?.trim() && !configRow?.postalAddress?.trim()) {
+        problems.push('Add your business postal address in Settings > Email. It is required in the footer of every marketing email.');
+      }
+      if (problems.length > 0) {
+        return NextResponse.json({ error: problems.join(' '), problems }, { status: 400 });
+      }
+    }
+
     let templateB = null;
     if (isAbTest && abTemplateIdB) {
       templateB = await db.template.findUnique({
@@ -155,7 +188,41 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2. Query target customers based on unified segmentation
+    const effectiveFilter = recipientFilter || (resolvedSegment ? { type: 'rules', rules: resolvedSegment.rules } : { type: 'all' });
+
+    // EMAIL branch: enqueue only — worker builds audience and dispatches asynchronously
+    if (channel === 'EMAIL') {
+      const campaign = await db.broadcastCampaign.create({
+        data: {
+          tenantId,
+          name,
+          channel: 'EMAIL',
+          templateId,
+          segmentId: segmentId || null,
+          subject: subject || template.subject || null,
+          previewText: previewText || template.previewText || null,
+          senderName: senderName || null,
+          senderEmail: senderEmail || null,
+          replyTo: replyTo || null,
+          recipientFilter: effectiveFilter,
+          scheduledAt: scheduledAt ? new Date(scheduledAt) : new Date(),
+          status: 'QUEUED',
+          sent: 0,
+          cost: 0,
+          idempotencyKey,
+          isAbTest: Boolean(isAbTest),
+          abSubjectB: abSubjectB || null,
+          abSenderNameB: abSenderNameB || null,
+          abTemplateIdB: abTemplateIdB || null,
+          abTestSplit: abTestSplit ? Number(abTestSplit) : 50,
+          abWinnerMetric: abWinnerMetric || 'CLICKS',
+          abDurationHours: abDurationHours ? Number(abDurationHours) : 4,
+        },
+      });
+      return NextResponse.json(campaign, { status: 202 });
+    }
+
+    // 2. Query target customers based on unified segmentation (WhatsApp branch)
     const { SegmentationService } = await import('@/lib/email/segmentation');
     const whereClause = await SegmentationService.buildUnifiedCustomerFilter(
       tenantId,
@@ -172,9 +239,7 @@ export async function POST(req: Request) {
 
     // 3. Compute cost estimate
     let pricePerMessage = 0.020; // Default WHATSAPP MARKETING
-    if (channel === 'EMAIL') {
-      pricePerMessage = 0.001; // Typical transactional/marketing email unit cost (~$1/1000)
-    } else if (template.category === 'UTILITY') {
+    if (template.category === 'UTILITY') {
       pricePerMessage = 0.010;
     } else if (template.category === 'AUTHENTICATION') {
       pricePerMessage = 0.005;
@@ -222,25 +287,8 @@ export async function POST(req: Request) {
         },
       });
 
-      if (channel === 'EMAIL') {
-        const { dispatchEmailCampaign } = await import('@/lib/email/dispatchCampaign');
-        const appOrigin =
-          process.env.NEXTAUTH_URL ||
-          `${req.headers.get('x-forwarded-proto') || 'http'}://${req.headers.get('host') || 'localhost:3000'}`;
-
-        const emailTotal = customers.filter((c) => Boolean(c.email)).length;
-        if (emailTotal > 25) {
-          await db.broadcastCampaign.update({
-            where: { id: campaign.id },
-            data: { status: 'SENDING' },
-          });
-          void dispatchEmailCampaign({ campaignId: campaign.id, tenantId, appOrigin }).catch((err) =>
-            console.error('[Email Broadcast] Background batch error:', err)
-          );
-          return NextResponse.json({ ...campaign, status: 'SENDING' }, { status: 202 });
-        }
-
-        await dispatchEmailCampaign({ campaignId: campaign.id, tenantId, appOrigin });
+      if (false) {
+        // Placeholder: EMAIL is handled above via enqueue-only
       } else {
         // Send real WhatsApp message via whatsapp-engine HTTP Service
         for (const customer of customers) {
@@ -258,11 +306,11 @@ export async function POST(req: Request) {
           // Resolve personalizations
           let messageContent = template.body
             .replace(/\{\{name\}\}/g, customer.displayName)
-            .replace(/\{\{policy_number\}\}/g, customer.activePolicy?.policyNumber || 'POL-58472')
-            .replace(/\{\{last_interaction\}\}/g, '2 days ago')
+            .replace(/\{\{policy_number\}\}/g, customer.activePolicy?.policyNumber || '')
+            .replace(/\{\{last_interaction\}\}/g, customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : '')
             .replace(/\{\{due_date\}\}/g, customer.activePolicy?.expiryDate 
               ? new Date(customer.activePolicy.expiryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              : 'Oct 24, 2026'
+              : ''
             );
 
           if (template.header) {

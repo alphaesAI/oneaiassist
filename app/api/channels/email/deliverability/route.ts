@@ -108,7 +108,9 @@ export async function POST(req: Request) {
     if (action === 'RESUME_SENDING') {
       await db.tenantEmailConfig.updateMany({
         where: { tenantId },
-        data: { isAutoPaused: false },
+        // autoPausedAt is kept on purpose: the circuit breaker only counts events after it,
+        // so the complaints that caused this pause do not pause the tenant again immediately.
+        data: { isAutoPaused: false, autoPauseReason: null },
       });
       return NextResponse.json({ success: true, message: 'Sending successfully resumed.' });
     }

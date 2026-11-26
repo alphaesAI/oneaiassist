@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
+import { EmailTemplateEngine } from '@/lib/email/templateEngine';
 
 export async function GET() {
   try {
@@ -66,8 +67,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Name and template body content are required' }, { status: 400 });
     }
 
-    const finalHtml = htmlBody || templateBody || '';
-    const finalPlain = plainText || (finalHtml ? finalHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '');
+    const rawHtml = htmlBody || (channel === 'EMAIL' ? templateBody : '') || '';
+    const finalHtml = rawHtml ? EmailTemplateEngine.sanitizeHtml(rawHtml) : '';
+    const finalPlain = plainText || (finalHtml ? EmailTemplateEngine.htmlToPlainText(finalHtml) : '');
 
     const template = await db.template.create({
       data: {

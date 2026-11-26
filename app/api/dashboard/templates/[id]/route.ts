@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
+import { EmailTemplateEngine } from '@/lib/email/templateEngine';
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -15,11 +16,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     const body = await req.json();
-    const finalHtml = body.htmlBody ?? existing.htmlBody ?? '';
+    const rawHtml = body.htmlBody !== undefined ? body.htmlBody : (existing.htmlBody ?? '');
+    const finalHtml = rawHtml ? EmailTemplateEngine.sanitizeHtml(rawHtml) : '';
     const finalPlain =
       body.plainText ??
       body.body ??
-      (finalHtml ? finalHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : existing.body);
+      (finalHtml ? EmailTemplateEngine.htmlToPlainText(finalHtml) : existing.body);
 
     const updated = await db.template.update({
       where: { id: params.id },

@@ -1,98 +1,33 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
+import { validateJourneySteps } from '@/lib/email/journeyValidation';
 
 export async function GET() {
   try {
     const { tenantId, role } = await getTenantContext();
     const db = getTenantPrisma(tenantId, role);
 
-    let journeys = await db.crossChannelJourney.findMany({
+    const journeys = await db.crossChannelJourney.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Seed default cross-channel journeys if empty for this tenant
-    if (journeys.length === 0) {
-      const defaultJourneys = [
-        {
-          tenantId,
-          name: 'Multi-Channel Lead Welcome (WhatsApp + Email Fallback)',
-          description: 'Engages new leads on WhatsApp; if not read in 24 hours, automatically falls back to an Email quote summary.',
-          triggerType: 'CONTACT_CREATED' as const,
-          status: 'ACTIVE' as const,
-          frequencyCapDays: 1,
-          quietHoursStart: '21:00',
-          quietHoursEnd: '08:00',
-          exitConditions: ['CONVERTED', 'UNSUBSCRIBED'],
-          enrolledCount: 142,
-          completedCount: 98,
-          steps: [
-            { id: 's1', type: 'SEND_WHATSAPP', channel: 'WHATSAPP', templateName: 'welcome_quote_summary' },
-            { id: 's2', type: 'WAIT_DELAY', delayHours: 24 },
-            {
-              id: 's3',
-              type: 'BRANCH_CONDITION',
-              conditionType: 'WHATSAPP_UNREAD_24H',
-              onTrueStepIndex: 5, // Read -> Skip to complete
-              onFalseStepIndex: 3, // Unread -> Fallback to Email
-            },
-            {
-              id: 's4',
-              type: 'SEND_EMAIL',
-              channel: 'EMAIL',
-              subject: 'Your Apex Insurance Coverage Overview & Quote',
-            },
-            { id: 's5', type: 'ADD_TAG', tagName: 'Cross-Channel Contacted' },
-          ],
-        },
-        {
-          tenantId,
-          name: 'Email Click to WhatsApp Advisor Follow-Up',
-          description: 'Triggers when a prospect clicks any quote link in an email; immediately schedules an advisor follow-up on WhatsApp.',
-          triggerType: 'EMAIL_LINK_CLICKED' as const,
-          status: 'ACTIVE' as const,
-          frequencyCapDays: 1,
-          quietHoursStart: '21:00',
-          quietHoursEnd: '08:00',
-          exitConditions: ['CONVERTED'],
-          enrolledCount: 64,
-          completedCount: 52,
-          steps: [
-            { id: 's1', type: 'WAIT_DELAY', delayHours: 2 },
-            { id: 's2', type: 'SEND_WHATSAPP', channel: 'WHATSAPP', templateName: 'advisor_quote_assistant' },
-            { id: 's3', type: 'HANDOFF_TO_HUMAN' },
-          ],
-        },
-        {
-          tenantId,
-          name: 'Post-Checkout Policy Welcome & Care Guide',
-          description: 'Sends formal policy documents by email, followed by a WhatsApp service onboarding nudge.',
-          triggerType: 'TAG_ADDED' as const,
-          triggerConfig: { tag: 'Active Insured' },
-          status: 'ACTIVE' as const,
-          frequencyCapDays: 2,
-          quietHoursStart: '21:00',
-          quietHoursEnd: '08:00',
-          exitConditions: ['UNSUBSCRIBED'],
-          enrolledCount: 210,
-          completedCount: 205,
-          steps: [
-            { id: 's1', type: 'SEND_EMAIL', channel: 'EMAIL', subject: 'Your Policy Schedule & Digital ID Card' },
-            { id: 's2', type: 'WAIT_DELAY', delayHours: 72 },
-            { id: 's3', type: 'SEND_WHATSAPP', channel: 'WHATSAPP', templateName: 'claim_portal_guide' },
-          ],
-        },
-      ];
-
-      for (const dj of defaultJourneys) {
-        await db.crossChannelJourney.create({ data: dj });
-      }
-
-      journeys = await db.crossChannelJourney.findMany({
-        where: { tenantId },
-        orderBy: { createdAt: 'desc' },
-      });
+    // Counts come from real enrollment rows, never from stored or sample numbers.
+    const enrollmentCounts = journeys.length
+      ? await db.journeyEnrollment.groupBy({
+          by: ['journeyId', 'status'],
+          where: { tenantId, journeyId: { in: journeys.map((j) => j.id) } },
+          _count: { _all: true },
+        })
+      : [];
+    const countsByJourney = new Map<string, { enrolled: number; completed: number; failed: number }>();
+    for (const row of enrollmentCounts) {
+      const c = countsByJourney.get(row.journeyId) || { enrolled: 0, completed: 0, failed: 0 };
+      c.enrolled += row._count._all;
+      if (row.status === 'COMPLETED') c.completed += row._count._all;
+      if (row.status === 'FAILED') c.failed += row._count._all;
+      countsByJourney.set(row.journeyId, c);
     }
 
     const mapped = journeys.map((j) => {
@@ -105,8 +40,10 @@ export async function GET() {
         triggerType: j.triggerType,
         status: j.status,
         stepsCount: stepsArr.length,
-        enrolledCount: j.enrolledCount,
-        completedCount: j.completedCount,
+        enrolledCount: countsByJourney.get(j.id)?.enrolled ?? 0,
+        completedCount: countsByJourney.get(j.id)?.completed ?? 0,
+        failedCount: countsByJourney.get(j.id)?.failed ?? 0,
+        triggerConfig: j.triggerConfig ?? null,
         frequencyCapDays: j.frequencyCapDays,
         quietHoursStart: j.quietHoursStart,
         quietHoursEnd: j.quietHoursEnd,
@@ -131,33 +68,48 @@ export async function POST(req: Request) {
       name,
       description,
       trigger = 'CONTACT_CREATED',
+      triggerConfig,
       steps = [],
       frequencyCapDays = 1,
       quietHoursStart = '21:00',
       quietHoursEnd = '08:00',
+      activate = true,
     } = body;
 
-    if (!name) {
+    if (!name || !String(name).trim()) {
       return NextResponse.json({ error: 'Sequence name is required' }, { status: 400 });
     }
 
-    const defaultSteps = steps.length > 0 ? steps : [
-      { id: 's1', type: 'SEND_WHATSAPP', channel: 'WHATSAPP', templateName: 'welcome_template' },
-      { id: 's2', type: 'WAIT_DELAY', delayHours: 24 },
-      { id: 's3', type: 'SEND_EMAIL', channel: 'EMAIL', subject: 'Follow up on your insurance quote' },
-    ];
+    // Steps are exactly what the user built. Nothing is filled in with sample steps or template names.
+    const problems = await validateJourneySteps(tenantId, steps);
+    if (problems.length > 0) {
+      return NextResponse.json({ error: problems.join(' '), problems }, { status: 400 });
+    }
+
+    const cleanConfig: Record<string, string> = {};
+    if (triggerConfig && typeof triggerConfig === 'object') {
+      for (const key of ['tag', 'listId', 'formId', 'campaignId']) {
+        const value = (triggerConfig as Record<string, unknown>)[key];
+        if (typeof value === 'string' && value.trim()) cleanConfig[key] = value.trim();
+      }
+    }
+    if (cleanConfig.listId) {
+      const list = await db.contactList.findFirst({ where: { id: cleanConfig.listId, tenantId }, select: { id: true } });
+      if (!list) return NextResponse.json({ error: 'The chosen contact list does not exist.' }, { status: 400 });
+    }
 
     const journey = await db.crossChannelJourney.create({
       data: {
         tenantId,
-        name,
+        name: String(name).trim(),
         description: description || '',
         triggerType: trigger as any,
-        steps: defaultSteps,
-        frequencyCapDays: Number(frequencyCapDays) || 1,
-        quietHoursStart,
-        quietHoursEnd,
-        status: 'ACTIVE',
+        triggerConfig: Object.keys(cleanConfig).length > 0 ? cleanConfig : undefined,
+        steps,
+        frequencyCapDays: Number.isFinite(Number(frequencyCapDays)) ? Math.max(0, Number(frequencyCapDays)) : 1,
+        quietHoursStart: quietHoursStart || null,
+        quietHoursEnd: quietHoursEnd || null,
+        status: activate ? 'ACTIVE' : 'DRAFT',
       },
     });
 
@@ -177,6 +129,22 @@ export async function PATCH(req: Request) {
 
     if (!id) {
       return NextResponse.json({ error: 'Sequence ID is required' }, { status: 400 });
+    }
+
+    const current = await db.crossChannelJourney.findFirst({ where: { id, tenantId } });
+    if (!current) {
+      return NextResponse.json({ error: 'Sequence not found' }, { status: 404 });
+    }
+
+    // A journey can only be switched on if every step can really run.
+    if (status === 'ACTIVE' && current.status !== 'ACTIVE') {
+      const problems = await validateJourneySteps(tenantId, current.steps);
+      if (problems.length > 0) {
+        return NextResponse.json(
+          { error: `This journey cannot be activated yet. ${problems.join(' ')}`, problems },
+          { status: 400 }
+        );
+      }
     }
 
     const updated = await db.crossChannelJourney.update({

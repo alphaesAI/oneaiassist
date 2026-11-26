@@ -46,7 +46,7 @@ export async function POST(
           { status: 400 }
         );
       }
-      nextStatus = 'QUEUED';
+      nextStatus = campaign.startedAt ? 'SENDING' : 'QUEUED';
     } else if (action === 'CANCEL') {
       if (campaign.status === 'COMPLETED') {
         return NextResponse.json(
@@ -56,7 +56,6 @@ export async function POST(
       }
       nextStatus = 'CANCELLED';
 
-      // Also mark any pending/queued broadcast jobs as CANCELLED
       await db.broadcastJob.updateMany({
         where: {
           campaignId: campaign.id,
@@ -64,7 +63,7 @@ export async function POST(
           status: 'PENDING',
         },
         data: {
-          status: 'FAILED',
+          status: 'CANCELLED',
           lastError: 'Campaign cancelled by operator.',
         },
       });

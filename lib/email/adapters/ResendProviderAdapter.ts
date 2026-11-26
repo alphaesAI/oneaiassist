@@ -4,47 +4,59 @@ export class ResendProviderAdapter implements IEmailProviderAdapter {
   readonly providerName = 'RESEND';
 
   async send(email: OutboundEmail, creds: EmailProviderCredentials): Promise<EmailSendResult> {
-    let fromEmail = creds.fromEmail || 'onboarding@resend.dev';
-    const fromName = creds.fromName || 'OneAI Support';
-    const isFreeMail = /@(gmail\.com|yahoo\.com|outlook\.com|hotmail\.com|icloud\.com)$/i.test(fromEmail);
-    if (isFreeMail) {
-      fromEmail = 'onboarding@resend.dev';
-    }
-
-    const sender = email.from && !/@(gmail\.com|yahoo\.com|outlook\.com|hotmail\.com|icloud\.com)/i.test(email.from)
-      ? email.from
-      : `"${fromName}" <${fromEmail}>`;
+    const fromEmail = email.from || creds.fromEmail;
+    const fromName = creds.fromName || '';
+    const sender = fromName ? `"${fromName}" <${fromEmail}>` : fromEmail;
     const replyTo = email.replyTo || creds.replyToEmail || creds.fromEmail || undefined;
 
     // Resend REST API
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${creds.apiKey}`,
-      },
-      body: JSON.stringify({
-        from: sender,
-        to: [email.to],
-        subject: email.subject,
-        html: email.html,
-        text: email.text,
-        reply_to: replyTo,
-        headers: email.headers,
-        tags: email.tags,
-      }),
-    });
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        signal: AbortSignal.timeout(30_000),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${creds.apiKey}`,
+          ...(email.idempotencyKey ? { 'Idempotency-Key': email.idempotencyKey } : {}),
+        },
+        body: JSON.stringify({
+          from: sender,
+          to: [email.to],
+          subject: email.subject,
+          html: email.html,
+          text: email.text,
+          reply_to: replyTo,
+          headers: email.headers,
+          tags: email.tags,
+        }),
+      });
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const errMsg = data.message || `Resend API failed with status ${res.status}`;
-      return { messageId: '', status: 'FAILED', error: errMsg };
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errMsg = data.message || `Resend API failed with status ${res.status}`;
+        return {
+          messageId: '',
+          status: 'FAILED',
+          error: errMsg,
+          httpStatus: res.status,
+          retryable: res.status === 429 || res.status >= 500,
+        };
+      }
+
+      return {
+        messageId: data.id || '',
+        status: 'SENT',
+        httpStatus: res.status,
+        retryable: false,
+      };
+    } catch (err: unknown) {
+      return {
+        messageId: '',
+        status: 'FAILED',
+        error: err instanceof Error ? err.message : 'Resend network error',
+        retryable: true,
+      };
     }
-
-    return {
-      messageId: data.id || '',
-      status: 'SENT',
-    };
   }
 
   private assertValidApiKey(creds: EmailProviderCredentials) {

@@ -56,28 +56,23 @@ export async function GET(req: Request) {
       }
     }
 
-    // 3. Top Clicked Links
-    const clickedEvents = await db.emailEvent.findMany({
+    // 3. Top Clicked Links (counted in the database, not by loading every click into memory)
+    const linkGroups = await db.emailEvent.groupBy({
+      by: ['url'],
       where: {
         tenantId,
         eventType: 'CLICK',
         NOT: { url: null },
         ...(campaignId ? { campaignId } : {}),
       },
-      select: { url: true },
+      _count: { _all: true },
+      orderBy: { _count: { url: 'desc' } },
+      take: 5,
     });
 
-    const linkCounts: Record<string, number> = {};
-    for (const ev of clickedEvents) {
-      if (ev.url) {
-        linkCounts[ev.url] = (linkCounts[ev.url] || 0) + 1;
-      }
-    }
-
-    const topLinks = Object.entries(linkCounts)
-      .map(([url, clicks]) => ({ url, clicks }))
-      .sort((a, b) => b.clicks - a.clicks)
-      .slice(0, 5);
+    const topLinks = linkGroups
+      .filter((g) => g.url)
+      .map((g) => ({ url: g.url as string, clicks: g._count._all }));
 
     // 4. Deliverability health status
     const tenantConfig = await db.tenantEmailConfig.findUnique({

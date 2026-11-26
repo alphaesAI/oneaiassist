@@ -3,8 +3,22 @@ import { ProviderFactory } from './ProviderFactory';
 import { EmailSuppressionService } from './suppression';
 import { getTenantPrisma } from '@/lib/db';
 
+export class EmailDeliveryError extends Error {
+  constructor(
+    message: string,
+    public readonly retryable: boolean,
+    public readonly httpStatus?: number
+  ) {
+    super(message);
+    this.name = 'EmailDeliveryError';
+  }
+}
+
 export class EmailTransportAdapter implements IMessageTransport {
-  constructor(private readonly tenantId: string) {}
+  constructor(
+    private readonly tenantId: string,
+    private readonly adapterOverride?: import('./types').IEmailProviderAdapter
+  ) {}
 
   async sendText(to: string, text: string): Promise<SendResult> {
     const cleanEmail = to.trim().toLowerCase();
@@ -12,22 +26,46 @@ export class EmailTransportAdapter implements IMessageTransport {
     // 1. Send-Time Suppression Check (Mandatory Compliance)
     const suppression = await EmailSuppressionService.isEmailSuppressed(this.tenantId, cleanEmail);
     if (suppression.suppressed) {
-      throw new Error(`Email delivery blocked: Recipient ${cleanEmail} is suppressed (${suppression.reason}).`);
+      throw new EmailDeliveryError(`Email delivery blocked: Recipient ${cleanEmail} is suppressed (${suppression.reason}).`, false);
     }
 
     // 2. Resolve Tenant Email Credentials & Config
-    const { adapter, creds, config } = await ProviderFactory.getTenantCredentials(this.tenantId);
+    const { adapter: resolvedAdapter, creds, config } = await ProviderFactory.getTenantCredentials(this.tenantId);
+    const adapter = this.adapterOverride || resolvedAdapter;
 
     // 3. Deliverability Auto-Pause Circuit Breaker
     if (config?.isAutoPaused) {
-      throw new Error(`Email delivery auto-paused for tenant ${this.tenantId}: High complaint rate (${config.complaintRate}%). Sending halted.`);
+      throw new EmailDeliveryError(`Email delivery auto-paused for tenant ${this.tenantId}: High complaint rate (${config.complaintRate}%). Sending halted.`, true);
     }
 
-    // 4. Construct Email Payload with RFC 8058 List-Unsubscribe headers & Open Pixel
+    // 4. Send-Time Verified Sending Domain Check
+    const fromDomain = (creds.fromEmail || '').split('@')[1]?.toLowerCase().trim();
+    if (!fromDomain) {
+      throw new EmailDeliveryError(`No valid from address configured for tenant ${this.tenantId}.`, false);
+    }
+    const db = getTenantPrisma(this.tenantId, 'ADMIN');
+    const verifiedDomain = await db.tenantSendingDomain.findFirst({
+      where: {
+        tenantId: this.tenantId,
+        domain: { equals: fromDomain, mode: 'insensitive' },
+        status: 'VERIFIED',
+      },
+    });
+    if (!verifiedDomain) {
+      throw new EmailDeliveryError(
+        `From address domain "${fromDomain}" is not a verified sending domain for this organization. Please add and verify this sending domain under Settings > Email Domains.`,
+        false
+      );
+    }
+
+    // 5. Construct Email Payload with RFC 8058 List-Unsubscribe headers & Open Pixel
     const appUrl = process.env.NEXTAUTH_URL || 'https://oneai.drgodly.com';
-    const unsubUrl = `${appUrl}/api/channels/email/unsubscribe?email=${encodeURIComponent(cleanEmail)}&tenantId=${this.tenantId}`;
     const { EmailTrackingService } = await import('./tracking');
-    const trackingPixelUrl = EmailTrackingService.generateOpenTrackingPixelUrl(appUrl, this.tenantId);
+    const unsubUrl = EmailTrackingService.generateUnsubscribeUrl(appUrl, {
+      tenantId: this.tenantId,
+      email: cleanEmail,
+    });
+    const trackingPixelUrl = EmailTrackingService.generateOpenTrackingPixelUrl(appUrl, this.tenantId, undefined, undefined, cleanEmail);
 
     const headers: Record<string, string> = {
       'List-Unsubscribe': `<${unsubUrl}>`,
@@ -59,16 +97,11 @@ export class EmailTransportAdapter implements IMessageTransport {
     }, creds);
 
     if (result.status === 'FAILED') {
-      throw new Error(result.error || 'Email dispatch failed via provider.');
+      throw new EmailDeliveryError(result.error || 'Email dispatch failed via provider.', Boolean(result.retryable), result.httpStatus);
     }
 
-    // Record initial delivery event
-    EmailTrackingService.recordEmailEvent({
-      tenantId: this.tenantId,
-      email: cleanEmail,
-      eventType: 'DELIVERED',
-      messageId: result.messageId,
-    }).catch((err) => console.error('[EmailTransport] Error logging delivery event:', err));
+    // "Accepted by the provider" is not "delivered": the DELIVERED event is recorded
+    // only when the provider confirms it by webhook.
 
     return { messageId: result.messageId };
   }
@@ -80,35 +113,78 @@ export class EmailTransportAdapter implements IMessageTransport {
     text?: string;
     previewText?: string;
     replyTo?: string;
+    fromName?: string;
+    idempotencyKey?: string;
+    customerId?: string;
+    campaignId?: string;
+    headers?: Record<string, string>;
   }): Promise<SendResult> {
     const cleanEmail = opts.to.trim().toLowerCase();
 
     const suppression = await EmailSuppressionService.isEmailSuppressed(this.tenantId, cleanEmail);
     if (suppression.suppressed) {
-      throw new Error(`Email delivery blocked: Recipient ${cleanEmail} is suppressed (${suppression.reason}).`);
+      throw new EmailDeliveryError(`Email delivery blocked: Recipient ${cleanEmail} is suppressed (${suppression.reason}).`, false);
     }
 
-    const { adapter, creds, config } = await ProviderFactory.getTenantCredentials(this.tenantId);
+    const { adapter: resolvedAdapter, creds, config } = await ProviderFactory.getTenantCredentials(this.tenantId);
+    const adapter = this.adapterOverride || resolvedAdapter;
     if (config?.isAutoPaused) {
-      throw new Error(`Email delivery auto-paused for tenant ${this.tenantId}: High complaint rate (${config.complaintRate}%). Sending halted.`);
+      throw new EmailDeliveryError(`Email delivery auto-paused for tenant ${this.tenantId}: High complaint rate (${config.complaintRate}%). Sending halted.`, true);
+    }
+
+    // Send-Time Verified Sending Domain Check
+    const fromDomain = (creds.fromEmail || '').split('@')[1]?.toLowerCase().trim();
+    if (!fromDomain) {
+      throw new EmailDeliveryError(`No valid from address configured for tenant ${this.tenantId}.`, false);
+    }
+    const db = getTenantPrisma(this.tenantId, 'ADMIN');
+    const verifiedDomain = await db.tenantSendingDomain.findFirst({
+      where: {
+        tenantId: this.tenantId,
+        domain: { equals: fromDomain, mode: 'insensitive' },
+        status: 'VERIFIED',
+      },
+    });
+    if (!verifiedDomain) {
+      throw new EmailDeliveryError(
+        `From address domain "${fromDomain}" is not a verified sending domain for this organization. Please add and verify this sending domain under Settings > Email Domains.`,
+        false
+      );
     }
 
     const appUrl = process.env.NEXTAUTH_URL || 'https://oneai.drgodly.com';
-    const unsubUrl = `${appUrl}/api/channels/email/unsubscribe?email=${encodeURIComponent(cleanEmail)}&tenantId=${this.tenantId}`;
     const { EmailTrackingService } = await import('./tracking');
-    const trackingPixelUrl = EmailTrackingService.generateOpenTrackingPixelUrl(appUrl, this.tenantId);
+    const unsubUrl = EmailTrackingService.generateUnsubscribeUrl(appUrl, {
+      tenantId: this.tenantId,
+      customerId: opts.customerId,
+      campaignId: opts.campaignId,
+      email: cleanEmail,
+    });
 
     const headers: Record<string, string> = {
       'List-Unsubscribe': `<${unsubUrl}>`,
       'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      ...(opts.headers || {}),
     };
 
     const preheaderHtml = opts.previewText
       ? `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${opts.previewText}</div>`
       : '';
-    const pixelImg = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none !important;" alt="" />`;
-    const finalHtml = `${preheaderHtml}${opts.html}${pixelImg}`;
+
+    // Rewrite all hyperlinks to signed click tracking URLs and inject 1x1 open pixel
+    const trackedHtml = EmailTrackingService.rewriteHtmlAndInjectTracking(opts.html, {
+      appBaseUrl: appUrl,
+      tenantId: this.tenantId,
+      customerId: opts.customerId,
+      campaignId: opts.campaignId,
+      email: cleanEmail,
+      unsubscribeUrl: unsubUrl,
+    });
+
+    const finalHtml = `${preheaderHtml}${trackedHtml}`;
     const plainFallback = opts.text || opts.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const effectiveCreds = opts.fromName ? { ...creds, fromName: opts.fromName } : creds;
 
     const result = await adapter.send({
       to: cleanEmail,
@@ -117,18 +193,14 @@ export class EmailTransportAdapter implements IMessageTransport {
       text: `${plainFallback}\n\nUnsubscribe: ${unsubUrl}`,
       replyTo: opts.replyTo,
       headers,
-    }, creds);
+      idempotencyKey: opts.idempotencyKey,
+    }, effectiveCreds);
 
     if (result.status === 'FAILED') {
-      throw new Error(result.error || 'Email dispatch failed via provider.');
+      throw new EmailDeliveryError(result.error || 'Email dispatch failed via provider.', Boolean(result.retryable), result.httpStatus);
     }
 
-    EmailTrackingService.recordEmailEvent({
-      tenantId: this.tenantId,
-      email: cleanEmail,
-      eventType: 'DELIVERED',
-      messageId: result.messageId,
-    }).catch((err) => console.error('[EmailTransport] Error logging delivery event:', err));
+    // DELIVERED is recorded by the provider webhook, not here.
 
     return { messageId: result.messageId };
   }

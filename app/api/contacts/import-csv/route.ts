@@ -1,123 +1,130 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
-import { normalizePhoneNumber } from '@/whatsapp-engine/agents/IdentityResolver';
+import { MAX_CSV_IMPORT_ROWS, parseCsv } from '@/lib/contacts/csvImport';
+
+export async function GET() {
+  try {
+    const { tenantId, role } = await getTenantContext();
+    const db = getTenantPrisma(tenantId, role);
+
+    const jobs = await db.contactImportJob.findMany({
+      where: { tenantId },
+      select: {
+        id: true,
+        fileName: true,
+        listId: true,
+        consentSource: true,
+        status: true,
+        totalRows: true,
+        importedCount: true,
+        updatedCount: true,
+        skippedCount: true,
+        lastError: true,
+        createdAt: true,
+        completedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    return NextResponse.json({ jobs });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to list imports' }, { status: 500 });
+  }
+}
 
 export async function POST(req: Request) {
   try {
     const { tenantId, role } = await getTenantContext();
     const db = getTenantPrisma(tenantId, role);
 
-    const body = await req.json();
-    const { rows, consentConfirmed } = body;
+    const contentType = req.headers.get('content-type') || '';
+    let fileName = 'upload.csv';
+    let csvText = '';
+    let listId: string | null = null;
+    let consentSource: string | null = null;
+    let consentProof: string | null = null;
 
-    // Strict compliance check
-    if (!consentConfirmed) {
-      return NextResponse.json({
-        error: 'Consent declaration required: You must confirm that these contacts explicitly opted in to receive marketing communications.',
-      }, { status: 400 });
-    }
-
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return NextResponse.json({ error: 'No contact rows provided for import.' }, { status: 400 });
-    }
-
-    let importedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
-    const errors: Array<{ row: number; error: string }> = [];
-
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const rawName = (row.name || row.displayName || row.fullName || '').trim();
-      const rawPhone = (row.phone || row.primaryPhone || row.mobile || '').trim();
-      const rawEmail = (row.email || row.mail || '').trim().toLowerCase();
-      const rawTags = Array.isArray(row.tags) ? row.tags : (row.tags ? String(row.tags).split(',').map(t => t.trim()) : []);
-
-      if (!rawPhone && !rawEmail) {
-        errors.push({ row: i + 1, error: 'Row has neither phone nor email.' });
-        skippedCount++;
-        continue;
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      const file = formData.get('file');
+      if (!file || !(file instanceof File)) {
+        return NextResponse.json({ error: 'CSV file is required (field name: "file").' }, { status: 400 });
       }
+      fileName = file.name || 'upload.csv';
+      csvText = await file.text();
+      const rawListId = formData.get('listId');
+      const rawSource = formData.get('consentSource');
+      const rawProof = formData.get('consentProof');
+      listId = typeof rawListId === 'string' && rawListId.trim() ? rawListId.trim() : null;
+      consentSource = typeof rawSource === 'string' && rawSource.trim() ? rawSource.trim() : null;
+      consentProof = typeof rawProof === 'string' && rawProof.trim() ? rawProof.trim() : null;
+    } else {
+      const body = await req.json();
+      if (typeof body.csv === 'string') {
+        csvText = body.csv;
+        fileName = typeof body.fileName === 'string' ? body.fileName : 'upload.csv';
+      } else if (Array.isArray(body.rows)) {
+        // Backward-compatible conversion if JSON rows are posted
+        const keys = Array.from(new Set(body.rows.flatMap((r: Record<string, unknown>) => Object.keys(r || {})))) as string[];
+        const headerLine = keys.join(',');
+        const dataLines = body.rows.map((r: Record<string, unknown>) =>
+          keys.map((k) => `"${String(r?.[k] ?? '').replace(/"/g, '""')}"`).join(',')
+        );
+        csvText = [headerLine, ...dataLines].join('\n');
+      }
+      listId = typeof body.listId === 'string' && body.listId.trim() ? body.listId.trim() : null;
+      consentSource = typeof body.consentSource === 'string' && body.consentSource.trim() ? body.consentSource.trim() : null;
+      consentProof = typeof body.consentProof === 'string' && body.consentProof.trim() ? body.consentProof.trim() : null;
+    }
 
-      const normalizedPhone = rawPhone ? normalizePhoneNumber(rawPhone) : `temp_em_${Date.now()}_${i}`;
-      const displayName = rawName || (rawEmail ? rawEmail.split('@')[0] : `Contact ${normalizedPhone.slice(-4)}`);
+    if (!csvText.trim()) {
+      return NextResponse.json({ error: 'CSV file is empty.' }, { status: 400 });
+    }
 
-      try {
-        // Find existing customer by phone or email
-        const existing = await db.customer.findFirst({
-          where: {
-            tenantId,
-            OR: [
-              ...(rawEmail ? [{ email: rawEmail }] : []),
-              ...(rawPhone ? [{ primaryPhone: normalizedPhone }] : []),
-            ],
-          },
-        });
+    const { rows } = parseCsv(csvText);
+    if (rows.length === 0) {
+      return NextResponse.json({ error: 'CSV contains no data rows.' }, { status: 400 });
+    }
+    if (rows.length > MAX_CSV_IMPORT_ROWS) {
+      return NextResponse.json(
+        { error: `CSV exceeds maximum limit of ${MAX_CSV_IMPORT_ROWS} rows (got ${rows.length}).` },
+        { status: 400 }
+      );
+    }
 
-        if (existing) {
-          // Merge tags and update email if missing
-          const mergedTags = Array.from(new Set([...existing.tags, ...rawTags]));
-          await db.customer.update({
-            where: { id: existing.id },
-            data: {
-              displayName: existing.displayName || displayName,
-              email: existing.email || rawEmail || null,
-              emailConsentStatus: existing.emailConsentStatus === 'UNSUBSCRIBED' ? 'UNSUBSCRIBED' : 'SUBSCRIBED',
-              emailConsentSource: existing.emailConsentSource || 'CSV_IMPORT',
-              emailConsentTimestamp: existing.emailConsentTimestamp || new Date(),
-              tags: mergedTags,
-            },
-          });
-          updatedCount++;
-        } else {
-          // Create new customer
-          const newCust = await db.customer.create({
-            data: {
-              tenantId,
-              displayName,
-              primaryPhone: normalizedPhone,
-              email: rawEmail || null,
-              optedIn: true,
-              optedInAt: new Date(),
-              emailConsentStatus: 'SUBSCRIBED',
-              emailConsentSource: 'CSV_IMPORT',
-              emailConsentTimestamp: new Date(),
-              tags: rawTags,
-              customerChannels: {
-                create: [
-                  ...(rawPhone ? [{
-                    tenantId,
-                    channel: 'WHATSAPP' as const,
-                    channelIdentifier: normalizedPhone,
-                    channelMetadata: {},
-                  }] : []),
-                  ...(rawEmail ? [{
-                    tenantId,
-                    channel: 'EMAIL' as const,
-                    channelIdentifier: rawEmail,
-                    channelMetadata: {},
-                  }] : []),
-                ],
-              },
-            },
-          });
-          importedCount++;
-        }
-      } catch (rowErr: any) {
-        errors.push({ row: i + 1, error: rowErr.message });
-        skippedCount++;
+    if (listId) {
+      const list = await db.contactList.findFirst({ where: { id: listId, tenantId }, select: { id: true } });
+      if (!list) {
+        return NextResponse.json({ error: 'Target contact list not found.' }, { status: 404 });
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      imported: importedCount,
-      updated: updatedCount,
-      skipped: skippedCount,
-      errors: errors.slice(0, 10), // return first 10 errors for feedback
+    const job = await db.contactImportJob.create({
+      data: {
+        tenantId,
+        listId,
+        fileName,
+        csvContent: csvText,
+        consentSource,
+        consentProof,
+        status: 'PENDING',
+        totalRows: rows.length,
+      },
+      select: {
+        id: true,
+        fileName: true,
+        listId: true,
+        consentSource: true,
+        status: true,
+        totalRows: true,
+        createdAt: true,
+      },
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Import failed' }, { status: 500 });
+
+    return NextResponse.json({ jobId: job.id, ...job }, { status: 202 });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Import failed' }, { status: 500 });
   }
 }
