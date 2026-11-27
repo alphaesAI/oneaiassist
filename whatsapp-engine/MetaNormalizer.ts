@@ -13,14 +13,33 @@ export interface MetaCanonicalMessage {
 
 export interface MetaStatusReceipt {
   messageId: string;
+  /** The business phone number the status belongs to; identifies the tenant. */
+  phoneNumberId: string;
   status: 'DELIVERED' | 'READ' | 'FAILED';
   recipientId: string;
   timestamp: string;
+  /** Meta's error code and explanation, present on FAILED. */
+  errorCode?: string;
+  errorMessage?: string;
 }
 
 export function normalizeMetaPhone(s?: string): string {
   if (!s) return '';
   return String(s).replace(/\D/g, '');
+}
+
+/** Meta's reason for a failed delivery, taken from the first entry of the status "errors" list. */
+function describeStatusError(errors: unknown): { errorCode?: string; errorMessage?: string } {
+  const first = Array.isArray(errors) ? errors[0] : null;
+  if (!first || typeof first !== 'object') return {};
+  const e = first as Record<string, any>;
+  const text = [e.title, e.message, e.error_data?.details]
+    .filter((t, i, all) => typeof t === 'string' && t && all.indexOf(t) === i)
+    .join(' - ');
+  return {
+    ...(e.code !== undefined && e.code !== null ? { errorCode: String(e.code) } : {}),
+    ...(text ? { errorMessage: text } : {}),
+  };
 }
 
 export class MetaNormalizer {
@@ -115,11 +134,13 @@ export class MetaNormalizer {
           if (mappedStatus) {
             statuses.push({
               messageId: st.id || '',
+              phoneNumberId,
               status: mappedStatus,
               recipientId: normalizeMetaPhone(st.recipient_id),
               timestamp: st.timestamp
                 ? new Date(parseInt(st.timestamp, 10) * 1000).toISOString()
                 : new Date().toISOString(),
+              ...(mappedStatus === 'FAILED' ? describeStatusError(st.errors) : {}),
             });
           }
         }

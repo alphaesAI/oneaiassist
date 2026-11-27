@@ -2,6 +2,8 @@ import { Prisma, type JourneyTriggerType } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { EmailSuppressionService } from '@/lib/email/suppression';
 import { sendWhatsAppMessage } from '@/lib/whatsapp';
+import { usesOfficialApi } from '@/lib/whatsapp/serviceWindow';
+import { templateBroadcastProblems, toWhatsAppRecipient } from '@/lib/whatsapp/templateSend';
 
 export type JourneyStepType =
   | 'SEND_EMAIL'
@@ -441,6 +443,104 @@ export class CrossChannelJourneyEngine {
   }
 
   /**
+   * Queues one automation WhatsApp message for one contact through the same queue as WhatsApp
+   * broadcasts (official Cloud API only). Like email steps, each WhatsApp step has its own
+   * BroadcastCampaign row of kind "JOURNEY", so the step gets its own delivered / read / replied report.
+   */
+  static async enqueueJourneyWhatsApp(params: {
+    tenantId: string;
+    journeyId: string;
+    journeyName: string;
+    stepKey: string;
+    stepNumber: number;
+    templateId?: string;
+    templateName?: string;
+    customerId: string;
+    recipient: string;
+    enrolledAt: Date;
+    now: Date;
+  }): Promise<{ campaignId: string; jobId: string | null }> {
+    const { tenantId, journeyId, stepKey, customerId, now } = params;
+
+    if (!params.templateId && !params.templateName) {
+      throw new Error('This WhatsApp step has no template selected. Edit the automation and choose a WhatsApp template.');
+    }
+    const template = await prisma.template.findFirst({
+      where: { tenantId, channel: 'WHATSAPP', ...(params.templateId ? { id: params.templateId } : { name: params.templateName }) },
+    });
+    if (!template) {
+      throw new Error('The WhatsApp template chosen for this step no longer exists. Edit the automation and choose another template.');
+    }
+    if (template.status !== 'APPROVED' || !template.metaTemplateId) {
+      throw new Error(`The WhatsApp template "${template.name}" is not approved by Meta (status: ${template.status}). It can be sent once Meta approves it.`);
+    }
+    const problems = templateBroadcastProblems(template);
+    if (problems.length > 0) throw new Error(problems.join(' '));
+
+    const name = `[Automation] ${params.journeyName} · WhatsApp ${params.stepNumber}`;
+    const where = { tenantId, kind: JOURNEY_CAMPAIGN_KIND, journeyId, journeyStepId: stepKey };
+
+    let campaign = await prisma.broadcastCampaign.findFirst({ where });
+    if (!campaign) {
+      try {
+        campaign = await prisma.broadcastCampaign.create({
+          data: {
+            tenantId, name, channel: 'WHATSAPP', kind: JOURNEY_CAMPAIGN_KIND, journeyId, journeyStepId: stepKey,
+            templateId: template.id, status: 'SENDING', startedAt: now, audienceBuiltAt: now,
+          },
+        });
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          campaign = await prisma.broadcastCampaign.findFirst({ where });
+        } else {
+          throw err;
+        }
+      }
+    }
+    if (!campaign) throw new Error('Could not prepare the WhatsApp step for sending.');
+    if (campaign.channel !== 'WHATSAPP') {
+      throw new Error('This step was changed from email to WhatsApp. Remove the step and add it again so it gets its own report.');
+    }
+
+    // A step campaign that was paused (by a person, or because Meta refused the account) stays paused.
+    const nextStatus = campaign.status === 'PAUSED' ? 'PAUSED' : 'SENDING';
+    if (campaign.templateId !== template.id || campaign.name !== name || campaign.status !== nextStatus) {
+      campaign = await prisma.broadcastCampaign.update({
+        where: { id: campaign.id },
+        data: { templateId: template.id, name, status: nextStatus, completedAt: null },
+      });
+    }
+
+    const existing = await prisma.broadcastJob.findUnique({ where: { campaignId_customerId: { campaignId: campaign.id, customerId } } });
+    if (existing) {
+      // Same run (a retried step): already queued or sent. An earlier run (re-enrolled): send again.
+      const fromEarlierRun = Boolean(existing.processedAt && existing.processedAt < params.enrolledAt);
+      if (fromEarlierRun && existing.status !== 'PENDING' && existing.status !== 'PROCESSING') {
+        await prisma.broadcastJob.update({
+          where: { id: existing.id },
+          data: {
+            status: 'PENDING', recipient: params.recipient, attempts: 0, scheduledFor: now, processedAt: null,
+            providerMessageId: null, lastError: null, lockedAt: null, lockedBy: null,
+            deliveredAt: null, readAt: null, failedAt: null, errorCode: null, repliedAt: null, optedOutAt: null,
+          },
+        });
+      }
+      return { campaignId: campaign.id, jobId: existing.id };
+    }
+
+    try {
+      const job = await prisma.broadcastJob.create({
+        data: { tenantId, campaignId: campaign.id, customerId, recipient: params.recipient, channel: 'WHATSAPP', status: 'PENDING', scheduledFor: now },
+        select: { id: true },
+      });
+      return { campaignId: campaign.id, jobId: job.id };
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return { campaignId: campaign.id, jobId: null };
+      throw err;
+    }
+  }
+
+  /**
    * Executes the next pending step for an enrollment with:
    * - Validated branch targets
    * - E1 queue dispatch for email steps
@@ -598,8 +698,34 @@ export class CrossChannelJourneyEngine {
         }
 
         case 'SEND_WHATSAPP': {
-          if (!customer.primaryPhone || !customer.optedIn) {
-            stepResultDetails = { skipped: true, reason: 'Customer has not opted in to WhatsApp' };
+          if (!customer.primaryPhone || !customer.optedIn || customer.optedOutAt) {
+            stepResultDetails = { skipped: true, reason: 'Customer has not opted in to WhatsApp, or has opted out' };
+            break;
+          }
+
+          // Official Cloud API: the Meta-approved template goes through the WhatsApp sending queue,
+          // with the same consent checks, sending limit and delivery tracking as a broadcast.
+          if (await usesOfficialApi(tenantId)) {
+            const recipient = toWhatsAppRecipient(customer.primaryPhone);
+            if (!recipient) {
+              stepResultDetails = { skipped: true, reason: 'Missing or invalid phone number' };
+              break;
+            }
+            const stepKey = step.id || `index_${enrollment.currentStepIndex}`;
+            const { campaignId: stepCampaignId } = await this.enqueueJourneyWhatsApp({
+              tenantId,
+              journeyId: journey.id,
+              journeyName: journey.name,
+              stepKey,
+              stepNumber: enrollment.currentStepIndex + 1,
+              templateId: step.templateId,
+              templateName: step.templateName,
+              customerId: customer.id,
+              recipient,
+              enrolledAt: enrollment.enrolledAt,
+              now,
+            });
+            stepResultDetails = { channel: 'WHATSAPP', enqueuedToQueue: true, campaignId: stepCampaignId };
             break;
           }
 

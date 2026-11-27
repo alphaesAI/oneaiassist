@@ -75,7 +75,20 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
   const [metaPhoneId, setMetaPhoneId] = useState('');
   const [metaWabaId, setMetaWabaId] = useState('');
   const [metaAccessToken, setMetaAccessToken] = useState('');
-  const [metaVerifyToken, setMetaVerifyToken] = useState('oneai_meta_verify_secret_123');
+  const [metaInfo, setMetaInfo] = useState<{
+    status?: string;
+    accessTokenConfigured?: boolean;
+    displayPhoneNumber?: string | null;
+    verifiedName?: string | null;
+    qualityRating?: string | null;
+    messagingLimitTier?: string | null;
+    lastVerifiedAt?: string | null;
+    webhookSubscribed?: boolean;
+    lastError?: string | null;
+    webhookPath?: string;
+  } | null>(null);
+  const [metaError, setMetaError] = useState('');
+  const [metaNotice, setMetaNotice] = useState('');
   const [metaSaveSuccess, setMetaSaveSuccess] = useState(false);
   const [phoneAlias, setPhoneAlias] = useState('+1 (555) 019-2834 (Prime Marketing Main Line)');
 
@@ -307,36 +320,60 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
           }
           if (data.metaPhoneNumberId) setMetaPhoneId(data.metaPhoneNumberId);
           if (data.metaWabaId) setMetaWabaId(data.metaWabaId);
-          if (data.metaAccessToken) setMetaAccessToken(data.metaAccessToken);
-          if (data.metaVerifyToken) setMetaVerifyToken(data.metaVerifyToken);
+          if (!data.error) setMetaInfo(data);
         })
         .catch(() => {});
     }
   }, [tenantId]);
 
-  // Mutation to save Meta Cloud credentials
+  // Save Meta Cloud credentials. The server marks the line connected only after Meta confirms them.
   const saveMetaMutation = useMutation({
     mutationFn: async () => {
+      setMetaError('');
+      setMetaNotice('');
       const res = await fetch('/api/whatsapp/meta-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: 'META_CLOUD_API',
           metaPhoneNumberId: metaPhoneId,
           metaWabaId,
+          // Left empty when a token is already saved, so the saved one is kept.
           metaAccessToken,
-          metaVerifyToken,
         }),
       });
-      if (!res.ok) throw new Error('Failed to save Meta credentials');
-      return res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not save the WhatsApp connection.');
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setMetaInfo(data);
+      setMetaAccessToken('');
+      setMetaNotice(data.warning || '');
       setMetaSaveSuccess(true);
       refetchStatus();
       queryClient.invalidateQueries({ queryKey: ['whatsappStatus', tenantId] });
       setTimeout(() => setMetaSaveSuccess(false), 4000);
     },
+    onError: (err: Error) => setMetaError(err.message),
+  });
+
+  // Re-check the saved credentials with Meta.
+  const testMetaMutation = useMutation({
+    mutationFn: async () => {
+      setMetaError('');
+      setMetaNotice('');
+      const res = await fetch('/api/whatsapp/meta-config/test', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not test the WhatsApp connection.');
+      return data;
+    },
+    onSuccess: (data) => {
+      setMetaInfo(data);
+      if (data.ok) setMetaNotice('Meta confirmed the connection.');
+      else setMetaError(data.error || 'Meta did not accept the saved credentials.');
+      refetchStatus();
+    },
+    onError: (err: Error) => setMetaError(err.message),
   });
 
   // Fetch current WhatsApp status from database
@@ -948,7 +985,7 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Meta Phone Number ID <span className="text-rose-500">*</span>
+                    Phone Number ID <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -961,7 +998,7 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
 
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    WhatsApp Business Account ID (WABA ID)
+                    WhatsApp Business Account ID (WABA ID) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -974,61 +1011,123 @@ export default function SettingsChannelsTab({ tenantId }: SettingsChannelsTabPro
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                <label htmlFor="meta-access-token" className="block text-[11px] font-bold text-gray-700 mb-1">
                   Permanent System User Access Token <span className="text-rose-500">*</span>
+                  {metaInfo?.accessTokenConfigured && (
+                    <span className="ml-2 font-semibold text-emerald-600">Saved</span>
+                  )}
                 </label>
                 <input
+                  id="meta-access-token"
                   type="password"
-                  placeholder="EAAG..."
+                  autoComplete="off"
+                  placeholder={metaInfo?.accessTokenConfigured ? 'Leave empty to keep the saved token' : 'Paste the access token'}
                   value={metaAccessToken}
                   onChange={(e) => setMetaAccessToken(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono outline-none focus:border-emerald-600"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Needs the permissions whatsapp_business_messaging and whatsapp_business_management. It is stored encrypted and never shown again.
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Webhook Verification Token <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={metaVerifyToken}
-                    onChange={(e) => setMetaVerifyToken(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono outline-none focus:border-emerald-600"
-                  />
-                </div>
+              <div>
+                <label htmlFor="meta-webhook-url" className="block text-[11px] font-bold text-gray-700 mb-1">
+                  Webhook Callback URL (paste into your Meta app)
+                </label>
+                <input
+                  id="meta-webhook-url"
+                  type="text"
+                  readOnly
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}${metaInfo?.webhookPath || '/api/webhook/meta'}`}
+                  className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded-lg text-xs font-mono text-slate-700"
+                />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  The verify token is set by your platform administrator (server setting META_WEBHOOK_VERIFY_TOKEN). Meta needs a public HTTPS address.
+                </p>
+              </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Webhook Callback URL (Meta App Dashboard)
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value="https://oneai.drgodly.com/api/webhook/meta"
-                      className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded-lg text-xs font-mono text-slate-700"
-                    />
+              {metaInfo?.accessTokenConfigured && (
+                <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-white border border-emerald-200 text-[11px]">
+                  <div>
+                    <dt className="font-bold text-gray-500">Status</dt>
+                    <dd className={`font-bold ${metaInfo.status === 'CONNECTED' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {metaInfo.status === 'CONNECTED' ? 'Connected' : 'Not connected'}
+                    </dd>
                   </div>
-                </div>
-              </div>
+                  <div>
+                    <dt className="font-bold text-gray-500">Phone number</dt>
+                    <dd className="font-semibold text-gray-800">{metaInfo.displayPhoneNumber || 'Not reported'}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-bold text-gray-500">Business name</dt>
+                    <dd className="font-semibold text-gray-800">{metaInfo.verifiedName || 'Not reported'}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-bold text-gray-500">Quality rating</dt>
+                    <dd className="font-semibold text-gray-800">{metaInfo.qualityRating || 'Not reported'}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-bold text-gray-500">Messaging tier</dt>
+                    <dd className="font-semibold text-gray-800">{metaInfo.messagingLimitTier || 'Not reported'}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-bold text-gray-500">Last checked with Meta</dt>
+                    <dd className="font-semibold text-gray-800">
+                      {metaInfo.lastVerifiedAt ? new Date(metaInfo.lastVerifiedAt).toLocaleString() : 'Never'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-bold text-gray-500">Webhook subscription</dt>
+                    <dd className={`font-semibold ${metaInfo.webhookSubscribed ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {metaInfo.webhookSubscribed ? 'Subscribed' : 'Not subscribed'}
+                    </dd>
+                  </div>
+                </dl>
+              )}
 
-              <div className="pt-2 flex items-center justify-between">
+              {(metaError || metaInfo?.lastError) && (
+                <div role="alert" className="px-3 py-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold">
+                  {metaError || metaInfo?.lastError}
+                </div>
+              )}
+              {metaNotice && !metaError && (
+                <div role="status" className="px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs font-semibold">
+                  {metaNotice}
+                </div>
+              )}
+
+              <div className="pt-2 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() => saveMetaMutation.mutate()}
-                  disabled={saveMetaMutation.isPending || !metaPhoneId || !metaAccessToken}
+                  disabled={
+                    saveMetaMutation.isPending ||
+                    !metaPhoneId ||
+                    !metaWabaId ||
+                    (!metaAccessToken && !metaInfo?.accessTokenConfigured)
+                  }
                   className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md disabled:opacity-50 transition flex items-center gap-2"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  {saveMetaMutation.isPending ? 'Saving & Testing...' : 'Save & Connect Meta Cloud Line'}
+                  {saveMetaMutation.isPending ? 'Checking with Meta...' : 'Save & Connect'}
                 </button>
+
+                {metaInfo?.accessTokenConfigured && (
+                  <button
+                    type="button"
+                    onClick={() => testMetaMutation.mutate()}
+                    disabled={testMetaMutation.isPending}
+                    className="px-4 py-2.5 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 text-xs font-bold rounded-xl disabled:opacity-50 transition"
+                  >
+                    {testMetaMutation.isPending ? 'Testing...' : 'Test connection'}
+                  </button>
+                )}
 
                 {metaSaveSuccess && (
                   <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-300 flex items-center gap-1.5 animate-fade-in">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    Meta Credentials Saved & Line Connected!
+                    Meta confirmed the connection
                   </span>
                 )}
               </div>

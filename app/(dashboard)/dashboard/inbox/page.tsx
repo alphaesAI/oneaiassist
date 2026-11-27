@@ -52,6 +52,8 @@ interface Template {
   id: string;
   name: string;
   content: string;
+  channel?: string;
+  status?: string;
 }
 
 export default function InboxPage() {
@@ -145,7 +147,7 @@ export default function InboxPage() {
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId: selectedConvId, to: selectedConv?.customer.phone, text }),
+        body: JSON.stringify({ tenantId, conversationId: selectedConvId, to: selectedConv?.customer.phone, text }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -160,6 +162,43 @@ export default function InboxPage() {
       queryClient.invalidateQueries({ queryKey: ['conversations', tenantId] });
     },
   });
+
+  // 4b. Official WhatsApp API: outside the 24-hour window only an approved template can be sent
+  const { data: waInfo } = useQuery<{ officialApi: boolean }>({
+    queryKey: ['whatsapp-official-api', tenantId],
+    queryFn: async () => {
+      const res = await fetch('/api/whatsapp/send-template');
+      if (!res.ok) return { officialApi: false };
+      return res.json();
+    },
+    enabled: !!tenantId,
+  });
+  const [windowTemplateId, setWindowTemplateId] = useState('');
+  const sendTemplateMutation = useMutation({
+    mutationFn: async (templateId: string) => {
+      const res = await fetch('/api/whatsapp/send-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: selectedConvId, templateId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to send the template');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setWindowTemplateId('');
+      queryClient.invalidateQueries({ queryKey: ['messages', selectedConvId] });
+      queryClient.invalidateQueries({ queryKey: ['conversations', tenantId] });
+    },
+  });
+  useEffect(() => {
+    sendReplyMutation.reset();
+    sendTemplateMutation.reset();
+    setWindowTemplateId('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConvId]);
 
   // 5. Toggle AI Handling vs Agent Takeover mutation
   const toggleHandlerMutation = useMutation({
@@ -336,6 +375,7 @@ export default function InboxPage() {
 
   const sessionWindow = selectedConv ? getSessionWindowData(selectedConv.lastInboundMessageAt) : null;
   const isSessionClosed = sessionWindow?.isClosed ?? true;
+  const approvedWhatsAppTemplates = (templates || []).filter((t) => t.channel === 'WHATSAPP' && t.status === 'APPROVED');
   const showWarningBanner = !isSessionClosed && sessionWindow!.msRemaining < 6 * 60 * 60 * 1000;
 
   return (
@@ -607,6 +647,42 @@ export default function InboxPage() {
                 transition={{ duration: 0.15 }}
                 className="flex-1 flex flex-col h-full min-h-0 overflow-hidden"
               >
+                {chan === 'WHATSAPP' && waInfo?.officialApi && isSessionClosed && (
+                  <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2.5">
+                    <p className="text-[11px] font-semibold text-amber-900">
+                      The 24-hour reply window is closed. WhatsApp only allows an approved template until this contact messages you again.
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <select
+                        aria-label="Approved template"
+                        value={windowTemplateId}
+                        onChange={(e) => setWindowTemplateId(e.target.value)}
+                        className="flex-1 min-w-0 rounded-md border border-amber-300 bg-white px-2 py-1.5 text-[11px] text-[#1c1b1f]"
+                      >
+                        <option value="">Choose an approved template</option>
+                        {approvedWhatsAppTemplates.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!windowTemplateId || sendTemplateMutation.isPending}
+                        onClick={() => sendTemplateMutation.mutate(windowTemplateId)}
+                        className="shrink-0 rounded-md bg-[#004ac6] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
+                      >
+                        {sendTemplateMutation.isPending ? 'Sending' : 'Send template'}
+                      </button>
+                    </div>
+                    {approvedWhatsAppTemplates.length === 0 && (
+                      <p className="mt-1.5 text-[10px] text-amber-900">You have no approved WhatsApp templates yet. Create one in Templates.</p>
+                    )}
+                  </div>
+                )}
+                {(sendReplyMutation.error || sendTemplateMutation.error) && (
+                  <div role="alert" className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2 text-[11px] font-semibold text-red-800">
+                    {((sendReplyMutation.error || sendTemplateMutation.error) as Error).message}
+                  </div>
+                )}
                 {chatElement}
               </motion.div>
             );

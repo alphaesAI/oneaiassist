@@ -1,6 +1,6 @@
 import { IMessageTransport, SendResult } from './IMessageTransport';
 import { getTenantPrisma } from '../../lib/db/index';
-import { toJid } from './TransportManager';
+import { WhatsAppConnectionService } from '../../lib/whatsapp/connection';
 
 const META_API_VERSION = process.env.META_API_VERSION || 'v21.0';
 
@@ -16,19 +16,10 @@ export class MetaCloudTransportAdapter implements IMessageTransport {
   constructor(private readonly tenantId: string) {}
 
   private async getCredentials() {
-    const db = getTenantPrisma(this.tenantId, 'ADMIN');
-    const number = await db.whatsAppNumber.findUnique({
-      where: { tenantId: this.tenantId },
-    });
-
-    if (!number || !number.metaPhoneNumberId || !number.metaAccessToken) {
-      throw new Error(`Meta Cloud API credentials not configured for tenant ${this.tenantId}.`);
-    }
-
-    return {
-      phoneNumberId: number.metaPhoneNumberId,
-      accessToken: number.metaAccessToken,
-    };
+    // Reads and decrypts the tenant's own credentials. Throws a clear error when they are
+    // missing; there is no fallback to another transport or tenant.
+    const { phoneNumberId, accessToken } = await WhatsAppConnectionService.getCredentials(this.tenantId);
+    return { phoneNumberId, accessToken };
   }
 
   private async postJson(path: string, body: any): Promise<any> {

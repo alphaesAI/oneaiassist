@@ -9,12 +9,16 @@ import { decrypt } from '../lib/encryption';
 import { connectTenant, sessions, qrCodes, pairingCodes, startInboundJobWorker } from './engine-logic';
 import { connectTenantOpenWA, openwaSessions, openwaQrCodes } from './openwa-logic';
 import { MessageService } from './MessageService';
+import { usesOfficialApi, WhatsAppWindowClosedError } from '../lib/whatsapp/serviceWindow';
+import { DISCONNECTED_LINE } from '../lib/whatsapp/connection';
+import { captureRawBody } from '../lib/whatsapp/webhookAuth';
 import { TransportManager } from './transport/TransportManager';
 import { enqueueInboundJob } from './agents/IngressService';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// The raw bytes are kept on req.rawBody: Meta webhook signatures are checked against them.
+app.use(express.json({ verify: captureRawBody }));
 
 process.on('uncaughtException', (err: any) => {
   console.warn('[WhatsApp Engine] Process exception handled:', err?.message || err);
@@ -175,7 +179,7 @@ app.post('/api/whatsapp/disconnect', async (req, res) => {
     await db.whatsAppNumber.upsert({
       where: { tenantId },
       create: { tenantId, sessionData: '', status: 'DISCONNECTED', phoneNumber: null },
-      update: { sessionData: '', status: 'DISCONNECTED', phoneNumber: null },
+      update: { ...DISCONNECTED_LINE },
     });
 
     io.to(`tenant_${tenantId}`).emit('whatsapp_status', { status: 'DISCONNECTED' });
@@ -199,7 +203,8 @@ app.post('/api/whatsapp/send', async (req, res) => {
     }
 
     // Ensure an active session exists (Baileys or OpenWA)
-    let hasSession = sessions.has(tenantId) || openwaSessions.has(tenantId);
+    // An account on the official API sends through Meta and has no device session to check.
+    let hasSession = (await usesOfficialApi(tenantId)) || sessions.has(tenantId) || openwaSessions.has(tenantId);
     if (!hasSession) {
       try {
         const db = getTenantPrisma(tenantId, 'ADMIN');
@@ -235,6 +240,7 @@ app.post('/api/whatsapp/send', async (req, res) => {
 
     return res.json(result);
   } catch (err: unknown) {
+      if (err instanceof WhatsAppWindowClosedError) return res.status(err.status).json({ error: err.message, code: err.code });
     const msg = err instanceof Error ? err.message : 'Unknown outbound send error';
     return res.status(500).json({ error: msg });
   }
@@ -247,7 +253,7 @@ app.post('/api/whatsapp/typing', async (req, res) => {
     if (!tenantId || !to) {
       return res.status(400).json({ error: 'tenantId and to are required' });
     }
-    const transport = TransportManager.getTransport(tenantId);
+    const transport = await TransportManager.resolveTransport(tenantId);
     await transport.setTyping(to, on !== false);
     return res.json({ success: true });
   } catch (err: unknown) {

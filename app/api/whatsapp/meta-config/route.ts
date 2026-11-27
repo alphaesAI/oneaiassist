@@ -1,77 +1,58 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
+import { WhatsAppConnectionError, WhatsAppConnectionService } from '@/lib/whatsapp/connection';
+
+const CAN_MANAGE = new Set(['ADMIN', 'PLATFORM_OWNER']);
+
+function errorResponse(err: unknown, fallback: string) {
+  if (err instanceof WhatsAppConnectionError) {
+    return NextResponse.json({ error: err.message }, { status: err.status });
+  }
+  const msg = err instanceof Error ? err.message : fallback;
+  const unauthorized = msg.startsWith('Unauthorized');
+  // Unexpected errors are logged on the server and not echoed to the browser.
+  if (!unauthorized) console.error('[WhatsApp meta-config]', msg);
+  return NextResponse.json({ error: unauthorized ? msg : fallback }, { status: unauthorized ? 401 : 500 });
+}
 
 export async function GET() {
   try {
-    const { tenantId, role } = await getTenantContext();
-    const db = getTenantPrisma(tenantId, role);
-
-    const waNumber = await db.whatsAppNumber.findUnique({
-      where: { tenantId },
-    });
-
-    return NextResponse.json({
-      provider: waNumber?.provider || 'BAILEYS',
-      metaPhoneNumberId: waNumber?.metaPhoneNumberId || '',
-      metaWabaId: waNumber?.metaWabaId || '',
-      metaAccessToken: waNumber?.metaAccessToken ? '••••••••••••••••' : '',
-      metaVerifyToken: waNumber?.metaVerifyToken || '',
-      status: waNumber?.status || 'DISCONNECTED',
-    });
+    const { tenantId } = await getTenantContext();
+    if (!tenantId) return NextResponse.json({ error: 'No account selected.' }, { status: 400 });
+    return NextResponse.json(await WhatsAppConnectionService.getView(tenantId));
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Unauthorized';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return errorResponse(err, 'Could not load the WhatsApp settings.');
   }
 }
 
 export async function POST(req: Request) {
   try {
     const { tenantId, role, userId } = await getTenantContext();
-    const db = getTenantPrisma(tenantId, role);
-
-    const body = await req.json();
-    const { provider, metaPhoneNumberId, metaWabaId, metaAccessToken, metaVerifyToken } = body;
-
-    const dataToUpdate: any = {
-      provider: provider === 'META_CLOUD_API' ? 'META_CLOUD_API' : 'BAILEYS',
-      status: provider === 'META_CLOUD_API' ? 'CONNECTED' : 'DISCONNECTED',
-    };
-
-    if (metaPhoneNumberId !== undefined) dataToUpdate.metaPhoneNumberId = metaPhoneNumberId;
-    if (metaWabaId !== undefined) dataToUpdate.metaWabaId = metaWabaId;
-    if (metaVerifyToken !== undefined) dataToUpdate.metaVerifyToken = metaVerifyToken;
-    if (metaAccessToken && !metaAccessToken.includes('••••')) {
-      dataToUpdate.metaAccessToken = metaAccessToken;
+    if (!tenantId) return NextResponse.json({ error: 'No account selected.' }, { status: 400 });
+    if (!CAN_MANAGE.has(role)) {
+      return NextResponse.json({ error: 'Only an account admin can change the WhatsApp connection.' }, { status: 403 });
     }
 
-    const updated = await db.whatsAppNumber.upsert({
-      where: { tenantId },
-      create: {
-        tenantId,
-        sessionData: 'meta_cloud_config',
-        ...dataToUpdate,
-      },
-      update: dataToUpdate,
+    const body = await req.json().catch(() => ({}));
+    const { view, warning } = await WhatsAppConnectionService.saveAndVerify(tenantId, {
+      wabaId: body.metaWabaId,
+      phoneNumberId: body.metaPhoneNumberId,
+      accessToken: body.metaAccessToken,
     });
 
+    const db = getTenantPrisma(tenantId, role);
     await db.auditLog.create({
       data: {
         userId,
         tenantId,
         action: 'WHATSAPP_PROVIDER_UPDATED',
-        metadata: { provider: updated.provider, metaPhoneNumberId: updated.metaPhoneNumberId },
+        metadata: { provider: view.provider, metaPhoneNumberId: view.metaPhoneNumberId, metaWabaId: view.metaWabaId },
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      provider: updated.provider,
-      metaPhoneNumberId: updated.metaPhoneNumberId,
-      status: updated.status,
-    });
+    return NextResponse.json({ success: true, warning, ...view });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to update Meta Cloud API configuration';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return errorResponse(err, 'Could not save the WhatsApp connection.');
   }
 }

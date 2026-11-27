@@ -6,9 +6,23 @@ export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
+  // Development aid only. In production a template status can only come from Meta.
+  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_TEMPLATE_SIMULATION !== 'true') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   try {
     const { tenantId, role } = await getTenantContext();
     const db = getTenantPrisma(tenantId, role);
+
+    // An account on the official WhatsApp Cloud API never has its template status faked.
+    const number = await db.whatsAppNumber.findUnique({ where: { tenantId }, select: { provider: true } });
+    if (number?.provider === 'META_CLOUD_API') {
+      return NextResponse.json(
+        { error: 'This account uses the official WhatsApp API. Template status comes only from Meta.' },
+        { status: 409 }
+      );
+    }
 
     const template = await db.template.findUnique({
       where: { id: params.id },
@@ -18,7 +32,7 @@ export async function POST(
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
 
-    const { targetStatus, rejectionReason } = await req.json();
+    const { targetStatus } = await req.json();
 
     if (!['APPROVED', 'REJECTED', 'PENDING', 'DRAFT'].includes(targetStatus)) {
       return NextResponse.json(

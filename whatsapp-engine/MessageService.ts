@@ -5,6 +5,8 @@ import { promisify } from 'node:util';
 import { getTenantPrisma } from '../lib/db/index';
 import { TransportManager } from './transport/TransportManager';
 import { decrypt } from '../lib/encryption';
+import { MetaGraphError } from '../lib/whatsapp/metaGraph';
+import { getServiceWindow, usesOfficialApi, WhatsAppWindowClosedError } from '../lib/whatsapp/serviceWindow';
 
 const pexecFile = promisify(execFile);
 
@@ -133,7 +135,14 @@ export class MessageService {
       }
     }
 
-    const transport = TransportManager.getTransport(tenantId, convChannel);
+    // Official API: a free-form message is allowed only within 24 hours of the contact's last
+    // message. Checked here so every caller (inbox, AI reply) follows the same rule.
+    if (convChannel === 'WHATSAPP' && params.conversationId && (await usesOfficialApi(tenantId))) {
+      const window = await getServiceWindow(tenantId, params.conversationId);
+      if (!window.open) throw new WhatsAppWindowClosedError();
+    }
+
+    const transport = await TransportManager.resolveTransport(tenantId, convChannel);
     let result: { messageId: string } = { messageId: '' };
     let messageType: 'TEXT' | 'IMAGE' | 'VIDEO' | 'OTHER' = 'TEXT';
     let sendStatus: 'SENT' | 'FAILED' = 'SENT';
@@ -172,6 +181,9 @@ export class MessageService {
     } catch (sendErr: any) {
       console.error(`[MessageService] Outbound transport delivery failed for target ${targetPhone}:`, sendErr);
       sendStatus = 'FAILED';
+      // Meta's own "outside the 24-hour window" answer gets the same clear explanation.
+      if (sendErr instanceof MetaGraphError && sendErr.code === 131047) throw new WhatsAppWindowClosedError();
+      if (/131047/.test(String(sendErr?.message || ''))) throw new WhatsAppWindowClosedError();
       // Re-throw so caller route receives explicit error payload
       throw sendErr;
     }

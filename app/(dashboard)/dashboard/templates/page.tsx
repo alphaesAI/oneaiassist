@@ -24,8 +24,17 @@ export interface TemplateItem {
   header?: string;
   footer?: string;
   ctaButtons?: CTAButton[];
-  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAUSED' | 'DISABLED';
   rejectionReason?: string;
+  metaTemplateId?: string | null;
+  qualityScore?: string | null;
+  lastSyncedAt?: string | null;
+  variables?: {
+    body?: Array<{ index: number; example: string; source?: string }>;
+    header?: Array<{ index: number; example: string; source?: string }>;
+    buttonUrlExample?: string;
+    buttonUrlSource?: string;
+  } | null;
   usageCount: number;
   lastUsedAt?: string;
   createdAt: string;
@@ -58,12 +67,39 @@ export default function WhatsAppTemplateManagerPage() {
   const [ctaButtons, setCtaButtons] = useState<CTAButton[]>([]);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
 
-  // Test variables for live preview
-  const [testVariables, setTestVariables] = useState<Record<string, string>>({
-    '1': 'Alex',
-    '2': 'Prime Health Plan',
-    '3': '$199/mo',
-  });
+  // Sample values for each variable. Meta requires them to review a template, and they are used
+  // for the live preview. Nothing is pre-filled: the samples must be the user's own.
+  const [testVariables, setTestVariables] = useState<Record<string, string>>({});
+  // Where each body variable gets its real value when a message is sent.
+  const [variableSources, setVariableSources] = useState<Record<string, string>>({});
+  const [headerExample, setHeaderExample] = useState('');
+  const [buttonUrlExample, setButtonUrlExample] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [headerSource, setHeaderSource] = useState('');
+  const [buttonUrlSource, setButtonUrlSource] = useState('');
+  const [customFieldOptions, setCustomFieldOptions] = useState<Array<{ key: string; label: string }>>([]);
+
+  useEffect(() => {
+    fetch('/api/contacts/custom-fields')
+      .then((res) => (res.ok ? res.json() : { fields: [] }))
+      .then((data) => setCustomFieldOptions(Array.isArray(data.fields) ? data.fields.map((f: any) => ({ key: f.key, label: f.label })) : []))
+      .catch(() => {});
+  }, []);
+
+  // The contact fields a variable can be filled from when a message is sent.
+  const sourceOptions = (
+    <>
+      <option value="">Fill from…</option>
+      <option value="name">Contact full name</option>
+      <option value="first_name">Contact first name</option>
+      <option value="last_name">Contact last name</option>
+      <option value="email">Contact email</option>
+      <option value="phone">Contact phone</option>
+      {customFieldOptions.map((f) => (
+        <option key={f.key} value={`custom:${f.key}`}>{`Custom field: ${f.label}`}</option>
+      ))}
+    </>
+  );
 
   // Preview Modal
   const [previewTemplate, setPreviewTemplate] = useState<TemplateItem | null>(null);
@@ -140,6 +176,63 @@ export default function WhatsAppTemplateManagerPage() {
     setFooter('');
     setCtaButtons([]);
     setEditingId(null);
+    setTestVariables({});
+    setVariableSources({});
+    setHeaderExample('');
+    setButtonUrlExample('');
+    setHeaderSource('');
+    setButtonUrlSource('');
+  };
+
+  // Variable numbers used in the body, in order.
+  const bodyVariableNumbers = Array.from(
+    new Set((body.match(/\{\{\s*(\d+)\s*\}\}/g) || []).map((m) => m.replace(/[^\d]/g, '')))
+  ).sort((a, b) => Number(a) - Number(b));
+  const headerHasVariable = headerType === 'TEXT' && /\{\{\s*1\s*\}\}/.test(header);
+  const urlButtonHasVariable = ctaButtons.some((b) => b.type === 'URL' && /\{\{\s*1\s*\}\}/.test(b.url || ''));
+
+  const handleEditTemplate = (tpl: TemplateItem) => {
+    setEditingId(tpl.id);
+    setName(tpl.name);
+    setCategory(tpl.category === 'UTILITY' ? 'UTILITY' : 'MARKETING');
+    setLanguage(tpl.language || 'en');
+    setHeaderType(tpl.headerType === 'TEXT' ? 'TEXT' : 'NONE');
+    setHeader(tpl.header || '');
+    setBody(tpl.body || '');
+    setFooter(tpl.footer || '');
+    setCtaButtons(Array.isArray(tpl.ctaButtons) ? tpl.ctaButtons : []);
+    const examples: Record<string, string> = {};
+    const sources: Record<string, string> = {};
+    for (const v of tpl.variables?.body || []) {
+      examples[String(v.index)] = v.example || '';
+      if (v.source) sources[String(v.index)] = v.source;
+    }
+    setTestVariables(examples);
+    setVariableSources(sources);
+    setHeaderExample(tpl.variables?.header?.[0]?.example || '');
+    setButtonUrlExample(tpl.variables?.buttonUrlExample || '');
+    setHeaderSource(tpl.variables?.header?.[0]?.source || '');
+    setButtonUrlSource(tpl.variables?.buttonUrlSource || '');
+    setActionMessage(null);
+    setActiveTab('create');
+  };
+
+  const handleSyncWithMeta = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/templates/sync', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      setActionMessage({
+        type: 'success',
+        text: `Synced with Meta: ${data.updated} updated, ${data.imported} imported${data.missingAtMeta ? `, ${data.missingAtMeta} no longer exist at Meta` : ''}.`,
+      });
+      fetchTemplates();
+    } catch (err: any) {
+      setActionMessage({ type: 'error', text: err.message });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleSaveTemplate = async (autoSubmit: boolean = false) => {
@@ -165,6 +258,19 @@ export default function WhatsAppTemplateManagerPage() {
         body,
         footer,
         ctaButtons,
+        variables: {
+          body: bodyVariableNumbers.map((n) => ({
+            index: Number(n),
+            example: (testVariables[n] || '').trim(),
+            ...(variableSources[n] ? { source: variableSources[n] } : {}),
+          })),
+          ...(headerHasVariable
+            ? { header: [{ index: 1, example: headerExample.trim(), ...(headerSource ? { source: headerSource } : {}) }] }
+            : {}),
+          ...(urlButtonHasVariable
+            ? { buttonUrlExample: buttonUrlExample.trim(), ...(buttonUrlSource ? { buttonUrlSource } : {}) }
+            : {}),
+        },
         autoSubmit,
       };
 
@@ -180,12 +286,32 @@ export default function WhatsAppTemplateManagerPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save template');
 
-      setActionMessage({
-        type: 'success',
-        text: autoSubmit
-          ? `Template "${data.template.name}" created & submitted to Meta for approval!`
-          : `Template "${data.template.name}" saved as Draft.`,
-      });
+      let savedId: string = data.template.id;
+      let submitFailure: string | null = null;
+      let submitted = Boolean(data.submitted);
+      if (autoSubmit && data.submitError) submitFailure = data.submitError;
+
+      // An edited template is saved first and then sent to Meta as a second step.
+      if (autoSubmit && editingId) {
+        const subRes = await fetch(`/api/templates/${savedId}/submit`, { method: 'POST' });
+        const subData = await subRes.json().catch(() => ({}));
+        if (subRes.ok) submitted = true;
+        else submitFailure = subData.error || 'The template could not be submitted to Meta.';
+      }
+
+      if (submitFailure) {
+        setActionMessage({
+          type: 'error',
+          text: `Saved as a draft, but not submitted to Meta: ${submitFailure}`,
+        });
+      } else {
+        setActionMessage({
+          type: 'success',
+          text: submitted
+            ? `Template "${data.template.name}" was submitted to Meta and is waiting for review.`
+            : `Template "${data.template.name}" saved as Draft.`,
+        });
+      }
 
       resetForm();
       setActiveTab('list');
@@ -203,30 +329,7 @@ export default function WhatsAppTemplateManagerPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Submission failed');
 
-      setActionMessage({
-        type: 'success',
-        text: `Submitted to Meta! Status moved to PENDING.`,
-      });
-      fetchTemplates();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message });
-    }
-  };
-
-  const handleSimulateStatus = async (id: string, targetStatus: string, reason?: string) => {
-    try {
-      const res = await fetch(`/api/templates/${id}/simulate-approval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetStatus, rejectionReason: reason }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Simulation failed');
-
-      setActionMessage({
-        type: 'success',
-        text: `[DEV TOOLS] Template status updated to ${targetStatus}!`,
-      });
+      setActionMessage({ type: 'success', text: data.message || 'Submitted to Meta.' });
       fetchTemplates();
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err.message });
@@ -422,6 +525,16 @@ export default function WhatsAppTemplateManagerPage() {
 
         <div className="flex items-center gap-3">
           <button
+            onClick={handleSyncWithMeta}
+            disabled={isSyncing}
+            title="Read the latest template statuses from Meta and import templates created there"
+            className="px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-150 flex items-center gap-2 shadow-sm bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
+            <span>{isSyncing ? 'Syncing...' : 'Sync with Meta'}</span>
+          </button>
+
+          <button
             onClick={() => setIsEmailModalOpen(true)}
             className="px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-150 flex items-center gap-2 shadow-sm bg-indigo-600 text-white hover:bg-indigo-700"
           >
@@ -608,7 +721,7 @@ export default function WhatsAppTemplateManagerPage() {
                         {tpl.status === 'PENDING' && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            Pending Meta
+                            Waiting for Meta
                           </span>
                         )}
                         {tpl.status === 'DRAFT' && (
@@ -623,6 +736,18 @@ export default function WhatsAppTemplateManagerPage() {
                             Rejected
                           </span>
                         )}
+                        {tpl.status === 'PAUSED' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                            Paused by Meta
+                          </span>
+                        )}
+                        {tpl.status === 'DISABLED' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-200 text-slate-700 border border-slate-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                            Disabled
+                          </span>
+                        )}
                       </div>
 
                       {/* Template Name */}
@@ -632,11 +757,11 @@ export default function WhatsAppTemplateManagerPage() {
                       <p className="text-xs text-slate-400 font-medium mb-3">Language: {tpl.language.toUpperCase()}</p>
 
                       {/* Rejection Reason Warning */}
-                      {tpl.status === 'REJECTED' && tpl.rejectionReason && (
+                      {(tpl.status === 'REJECTED' || tpl.status === 'DISABLED' || tpl.status === 'PAUSED') && tpl.rejectionReason && (
                         <div className="mb-3 p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800">
                           <p className="font-semibold flex items-center gap-1">
                             <span className="material-symbols-outlined text-sm">warning</span>
-                            Rejection Reason:
+                            {tpl.status === 'REJECTED' ? 'Reason from Meta:' : 'Note:'}
                           </p>
                           <p className="mt-0.5 text-[11px]">{tpl.rejectionReason}</p>
                         </div>
@@ -671,7 +796,17 @@ export default function WhatsAppTemplateManagerPage() {
                           <span>Preview</span>
                         </button>
 
-                        {tpl.status === 'DRAFT' && (
+                        {tpl.channel !== 'EMAIL' && tpl.status !== 'PENDING' && tpl.status !== 'DISABLED' && (
+                          <button
+                            onClick={() => handleEditTemplate(tpl)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-sm">edit</span>
+                            <span>Edit</span>
+                          </button>
+                        )}
+
+                        {tpl.channel !== 'EMAIL' && (tpl.status === 'DRAFT' || tpl.status === 'REJECTED') && (
                           <button
                             onClick={() => handleSubmitForApproval(tpl.id)}
                             className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold flex items-center gap-1 transition-colors"
@@ -688,40 +823,6 @@ export default function WhatsAppTemplateManagerPage() {
                         >
                           <span className="material-symbols-outlined text-base">delete</span>
                         </button>
-                      </div>
-
-                      {/* DEV SIMULATOR BUTTONS BAR */}
-                      <div className="bg-slate-50 p-2 rounded-xl border border-dashed border-slate-300 mt-1">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
-                          <span>Dev State Simulator</span>
-                          <span className="text-blue-600 font-mono">LOCAL TEST</span>
-                        </p>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => handleSimulateStatus(tpl.id, 'APPROVED')}
-                            className="flex-1 py-1 px-2 rounded bg-emerald-600 text-white text-[10px] font-bold hover:bg-emerald-700 transition-colors"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() =>
-                              handleSimulateStatus(
-                                tpl.id,
-                                'REJECTED',
-                                'Body violates WhatsApp promotional guidelines.'
-                              )
-                            }
-                            className="flex-1 py-1 px-2 rounded bg-rose-600 text-white text-[10px] font-bold hover:bg-rose-700 transition-colors"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            onClick={() => handleSimulateStatus(tpl.id, 'DRAFT')}
-                            className="py-1 px-2 rounded bg-slate-200 text-slate-700 text-[10px] font-bold hover:bg-slate-300 transition-colors"
-                          >
-                            Draft
-                          </button>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -770,7 +871,6 @@ export default function WhatsAppTemplateManagerPage() {
                 >
                   <option value="MARKETING">MARKETING (Promotions, updates)</option>
                   <option value="UTILITY">UTILITY (Transactional, receipts)</option>
-                  <option value="AUTHENTICATION">AUTHENTICATION (OTP codes)</option>
                 </select>
               </div>
 
@@ -784,10 +884,16 @@ export default function WhatsAppTemplateManagerPage() {
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#004ac6]"
                 >
                   <option value="en">English (en)</option>
+                  <option value="en_US">English, US (en_US)</option>
+                  <option value="en_GB">English, UK (en_GB)</option>
+                  <option value="hi">Hindi (hi)</option>
+                  <option value="ta">Tamil (ta)</option>
+                  <option value="te">Telugu (te)</option>
                   <option value="es">Spanish (es)</option>
-                  <option value="pt_BR">Portuguese (pt_BR)</option>
+                  <option value="pt_BR">Portuguese, Brazil (pt_BR)</option>
                   <option value="fr">French (fr)</option>
                   <option value="de">German (de)</option>
+                  <option value="ar">Arabic (ar)</option>
                 </select>
               </div>
             </div>
@@ -798,7 +904,7 @@ export default function WhatsAppTemplateManagerPage() {
                 Header Type (Optional)
               </label>
               <div className="flex flex-wrap gap-2">
-                {['NONE', 'TEXT', 'IMAGE', 'DOCUMENT', 'VIDEO'].map((type) => (
+                {['NONE', 'TEXT'].map((type) => (
                   <button
                     key={type}
                     type="button"
@@ -809,19 +915,18 @@ export default function WhatsAppTemplateManagerPage() {
                         : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
-                    {type}
+                    {type === 'NONE' ? 'No header' : 'Text header'}
                   </button>
                 ))}
               </div>
+              <p className="text-[11px] text-slate-400">Image, video and document headers are not supported yet.</p>
 
               {headerType !== 'NONE' && (
                 <div className="mt-2">
                   <input
                     type="text"
                     placeholder={
-                      headerType === 'TEXT'
-                        ? 'Enter header text (e.g. Special Policy Offer!)'
-                        : 'Enter URL or media asset name'
+                      'Header text, up to 60 characters'
                     }
                     value={header}
                     onChange={(e) => setHeader(e.target.value)}
@@ -854,7 +959,7 @@ export default function WhatsAppTemplateManagerPage() {
                 className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#004ac6] leading-relaxed"
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                Use {"{{1}}"}, {"{{2}}"} for dynamic customer variables. Max 1024 characters.
+                Use {"{{1}}"}, {"{{2}}"} for values that change per customer. The body cannot start or end with a variable. {body.length}/1024 characters.
               </p>
             </div>
 
@@ -1003,28 +1108,82 @@ export default function WhatsAppTemplateManagerPage() {
               {/* Render WhatsApp Phone Screen */}
               {renderWhatsAppBubble()}
 
-              {/* Variable Value Testing Panel */}
+              {/* Sample values: required by Meta for review, and used for this preview */}
               <div className="mt-6 pt-4 border-t border-slate-100 space-y-3">
-                <p className="text-xs font-bold uppercase text-slate-600 tracking-wider">
-                  Test Variable Values (Preview Only)
+                <p className="text-xs font-bold uppercase text-slate-600 tracking-wider">Variable sample values</p>
+                <p className="text-[11px] text-slate-500">
+                  Meta needs a realistic sample for every variable to review the template. &quot;Fill from&quot; is where the real value
+                  comes from when the message is sent. A broadcast needs it for every variable; a contact who has no value for it is skipped.
                 </p>
-                <div className="grid grid-cols-3 gap-2">
-                  {['1', '2', '3'].map((num) => (
-                    <div key={num}>
-                      <label className="text-[10px] font-bold text-slate-400 font-mono block">
-                        {`{{${num}}}`}
-                      </label>
-                      <input
-                        type="text"
-                        value={testVariables[num] || ''}
-                        onChange={(e) =>
-                          setTestVariables({ ...testVariables, [num]: e.target.value })
-                        }
-                        className="w-full px-2 py-1 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700"
-                      />
-                    </div>
-                  ))}
-                </div>
+                {bodyVariableNumbers.length === 0 && !headerHasVariable && !urlButtonHasVariable ? (
+                  <p className="text-xs text-slate-400">This template has no variables.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {headerHasVariable && (
+                      <div className="flex items-center gap-2">
+                        <span className="w-20 text-[11px] font-bold text-slate-500">Header {'{{1}}'}</span>
+                        <input
+                          type="text"
+                          aria-label="Sample value for the header variable"
+                          placeholder="Sample value"
+                          value={headerExample}
+                          onChange={(e) => setHeaderExample(e.target.value)}
+                          className="flex-1 min-w-0 px-2 py-1 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700"
+                        />
+                        <select
+                          aria-label="Fill the header variable from"
+                          value={headerSource}
+                          onChange={(e) => setHeaderSource(e.target.value)}
+                          className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700"
+                        >
+                          {sourceOptions}
+                        </select>
+                      </div>
+                    )}
+                    {bodyVariableNumbers.map((num) => (
+                      <div key={num} className="flex items-center gap-2">
+                        <span className="w-20 text-[11px] font-bold text-slate-500 font-mono">{`Body {{${num}}}`}</span>
+                        <input
+                          type="text"
+                          aria-label={`Sample value for body variable ${num}`}
+                          placeholder="Sample value"
+                          value={testVariables[num] || ''}
+                          onChange={(e) => setTestVariables({ ...testVariables, [num]: e.target.value })}
+                          className="flex-1 min-w-0 px-2 py-1 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700"
+                        />
+                        <select
+                          aria-label={`Fill body variable ${num} from`}
+                          value={variableSources[num] || ''}
+                          onChange={(e) => setVariableSources({ ...variableSources, [num]: e.target.value })}
+                          className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700"
+                        >
+                          {sourceOptions}
+                        </select>
+                      </div>
+                    ))}
+                    {urlButtonHasVariable && (
+                      <div className="flex items-center gap-2">
+                        <span className="w-20 text-[11px] font-bold text-slate-500">Link {'{{1}}'}</span>
+                        <input
+                          type="text"
+                          aria-label="Sample value for the web address variable"
+                          placeholder="Sample value for the end of the web address"
+                          value={buttonUrlExample}
+                          onChange={(e) => setButtonUrlExample(e.target.value)}
+                          className="flex-1 min-w-0 px-2 py-1 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700"
+                        />
+                        <select
+                          aria-label="Fill the web address variable from"
+                          value={buttonUrlSource}
+                          onChange={(e) => setButtonUrlSource(e.target.value)}
+                          className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700"
+                        >
+                          {sourceOptions}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
