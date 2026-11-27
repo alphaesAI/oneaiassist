@@ -6,8 +6,24 @@ import { MetaNormalizer, normalizeMetaPhone } from '../MetaNormalizer';
 import { handleMessageStatusUpdate } from '../engine-logic';
 import { toJid } from '../transport/TransportManager';
 import { enqueueInboundJob } from '../agents/IngressService';
+import { findTenantIdByPhoneNumberId, isValidWebhookVerifyToken } from '../../lib/whatsapp/webhookAuth';
+import { WhatsAppTemplateService } from '../../lib/whatsapp/templateService';
+import { extractTemplateEvents, isValidMetaSignature } from '../../lib/whatsapp/webhookAuth';
+import { recordDeliveryEvent } from '../../lib/whatsapp/deliveryTracking';
+import { handleInboundWhatsApp, OPT_IN_CONFIRMATION, OPT_OUT_CONFIRMATION, type OptAction } from '../../lib/whatsapp/inbound';
+import { TransportManager } from '../transport/TransportManager';
 
-export function createMetaWebhookRouter(io: any) {
+export interface MetaWebhookOptions {
+  /** Sends the short confirmation after a STOP or START. Replaceable in tests. */
+  sendConfirmation?: (tenantId: string, to: string, text: string) => Promise<{ messageId: string }>;
+}
+
+async function defaultSendConfirmation(tenantId: string, to: string, text: string) {
+  const transport = await TransportManager.resolveTransport(tenantId, 'WHATSAPP');
+  return transport.sendText(to, text);
+}
+
+export function createMetaWebhookRouter(io: any, options: MetaWebhookOptions = {}) {
   const router = Router();
 
   /**
@@ -20,21 +36,12 @@ export function createMetaWebhookRouter(io: any) {
       const token = req.query['hub.verify_token'];
       const challenge = req.query['hub.challenge'];
 
-      if (mode === 'subscribe' && token) {
-        // Query database to match verify token across tenants
-        const matchingNumber = await prisma.whatsAppNumber.findFirst({
-          where: { metaVerifyToken: String(token) },
-        });
-
-        const defaultToken = process.env.META_VERIFY_TOKEN || 'oneai_meta_verify_secret_123';
-
-        if (matchingNumber || token === defaultToken) {
-          console.log(`[Meta Webhook] Verification successful for token: ${token}`);
-          return res.status(200).send(challenge);
-        }
+      if (mode === 'subscribe' && isValidWebhookVerifyToken(token)) {
+        console.log('[Meta Webhook] Verification handshake accepted.');
+        return res.status(200).send(String(challenge ?? ''));
       }
 
-      console.warn(`[Meta Webhook] Verification failed for mode: ${mode}, token: ${token}`);
+      console.warn(`[Meta Webhook] Verification handshake refused (mode: ${String(mode)}).`);
       return res.sendStatus(403);
     } catch (err) {
       console.error('[Meta Webhook] Error during GET verification handshake:', err);
@@ -48,6 +55,13 @@ export function createMetaWebhookRouter(io: any) {
    */
   router.post('/api/webhook/meta', async (req, res) => {
     try {
+      // Only requests signed by Meta with our app secret are processed. The signature covers the
+      // exact bytes of the body, so nothing is read from the payload before this check.
+      if (!isValidMetaSignature((req as any).rawBody, req.headers['x-hub-signature-256'])) {
+        console.warn('[Meta Webhook] Rejected a request with a missing or invalid signature.');
+        return res.sendStatus(401);
+      }
+
       // Respond 200 OK immediately to Meta webhook server
       res.status(200).send('EVENT_RECEIVED');
 
@@ -57,23 +71,14 @@ export function createMetaWebhookRouter(io: any) {
       // Process Inbound Messages
       for (const msg of parsed.messages) {
         try {
-          // Find tenant by metaPhoneNumberId or default tenant
-          let number = await prisma.whatsAppNumber.findFirst({
-            where: { metaPhoneNumberId: msg.phoneNumberId },
-          });
-
-          if (!number) {
-            number = await prisma.whatsAppNumber.findFirst({
-              where: { provider: 'META_CLOUD_API' },
-            });
-          }
-
-          if (!number) {
-            console.warn(`[Meta Webhook] No matching WhatsAppNumber for phoneNumberId ${msg.phoneNumberId}`);
+          // The phone number ID decides the tenant. An unknown number is dropped: it is never
+          // handed to another tenant.
+          const tenantId = await findTenantIdByPhoneNumberId(msg.phoneNumberId);
+          if (!tenantId) {
+            console.warn(`[Meta Webhook] Ignored message for unknown phoneNumberId ${msg.phoneNumberId}`);
             continue;
           }
 
-          const tenantId = number.tenantId;
           const db = getTenantPrisma(tenantId, 'ADMIN');
           const rawPhone = '+' + msg.contactNumber;
           const normRawPhone = msg.contactNumber;
@@ -95,6 +100,7 @@ export function createMetaWebhookRouter(io: any) {
 
           let createdMessage: any = null;
           let conversationId = '';
+          let customerId = '';
 
           await db.$transaction(async (tx) => {
             // 1. Identity Unification Check
@@ -177,6 +183,7 @@ export function createMetaWebhookRouter(io: any) {
             }
 
             conversationId = conversation.id;
+            customerId = targetCustomer.id;
 
             // 4. Save Inbound Message
             const message = await tx.message.create({
@@ -211,6 +218,50 @@ export function createMetaWebhookRouter(io: any) {
             });
           });
 
+          // 5b. Opt-out / opt-in keywords, and which campaign this message answers
+          let optAction: OptAction | null = null;
+          if (customerId) {
+            try {
+              const inbound = await handleInboundWhatsApp({
+                tenantId,
+                customerId,
+                text: msg.messageType === 'TEXT' ? msg.text : null,
+                at: msg.timestamp ? new Date(msg.timestamp) : undefined,
+                contextMessageId: msg.contextMessageId,
+              });
+              optAction = inbound.optAction;
+              if (inbound.campaignId && inbound.totals) {
+                io.to(`tenant_${tenantId}`).emit('broadcast_stats_updated', { campaignId: inbound.campaignId, ...inbound.totals });
+              }
+              if (optAction && conversationId) {
+                // Confirm to the contact. They have just messaged, so the 24-hour window is open.
+                const text = optAction === 'OPT_OUT' ? OPT_OUT_CONFIRMATION : OPT_IN_CONFIRMATION;
+                try {
+                  const sent = await (options.sendConfirmation || defaultSendConfirmation)(tenantId, msg.contactNumber, text);
+                  const confirmation = await db.message.create({
+                    data: {
+                      tenantId, conversationId, direction: 'OUTBOUND', senderType: 'BOT', content: text,
+                      channel: 'WHATSAPP', channelMessageId: sent.messageId || null, status: 'SENT', sentAt: new Date(),
+                    },
+                  });
+                  io.to(`tenant_${tenantId}`).emit('new_message', {
+                    conversationId,
+                    message: {
+                      id: confirmation.id, content: confirmation.content, direction: confirmation.direction,
+                      senderType: confirmation.senderType, createdAt: confirmation.createdAt,
+                      messageType: confirmation.messageType, status: confirmation.status,
+                    },
+                  });
+                } catch (confirmErr) {
+                  // The opt-out itself is already saved; only the confirmation text failed.
+                  console.error('[Meta Webhook] Could not send the opt-out/opt-in confirmation:', confirmErr instanceof Error ? confirmErr.message : confirmErr);
+                }
+              }
+            } catch (inboundErr) {
+              console.error(`[Meta Webhook] Error applying opt-out/reply tracking for ${msg.messageId}:`, inboundErr);
+            }
+          }
+
           // 6. Link created message and conversation to the enqueued InboundMessageJob
           if (enqueueRes.jobId && createdMessage && conversationId) {
             await db.inboundMessageJob.update({
@@ -218,7 +269,9 @@ export function createMetaWebhookRouter(io: any) {
               data: {
                 conversationId,
                 messageId: createdMessage.id,
-                status: 'QUEUED',
+                // A STOP or START is fully handled here; it is not passed to the AI assistant.
+                status: optAction ? 'COMPLETED' : 'QUEUED',
+                ...(optAction ? { processedAt: new Date() } : {}),
               },
             });
             console.log(`[Meta Webhook] Enqueued InboundMessageJob ${enqueueRes.jobId} for message ${createdMessage.id}`);
@@ -228,14 +281,38 @@ export function createMetaWebhookRouter(io: any) {
         }
       }
 
+      // Template review results. The event only says which template changed; the real status is
+      // then read from Meta with the tenant's own token, so a forged event cannot approve anything.
+      for (const event of extractTemplateEvents(body)) {
+        try {
+          await WhatsAppTemplateService.handleWebhookEvent(event);
+        } catch (tplErr) {
+          console.error('[Meta Webhook] Error processing template event:', tplErr);
+        }
+      }
+
       // Process Delivery Status Receipts
       for (const st of parsed.statuses) {
         try {
-          const number = await prisma.whatsAppNumber.findFirst({
-            where: { provider: 'META_CLOUD_API' },
+          const statusTenantId = await findTenantIdByPhoneNumberId(st.phoneNumberId);
+          if (!statusTenantId) {
+            console.warn(`[Meta Webhook] Ignored status for unknown phoneNumberId ${st.phoneNumberId}`);
+            continue;
+          }
+          const at = new Date(st.timestamp);
+          await handleMessageStatusUpdate(statusTenantId, st.messageId, st.status, io, at);
+
+          // The same update for the broadcast job that sent the message, with Meta's error code.
+          const tracked = await recordDeliveryEvent({
+            tenantId: statusTenantId,
+            providerMessageId: st.messageId,
+            status: st.status,
+            timestamp: at,
+            errorCode: st.errorCode,
+            errorMessage: st.errorMessage,
           });
-          if (number) {
-            await handleMessageStatusUpdate(number.tenantId, st.messageId, st.status, io);
+          if (tracked.changed && tracked.campaignId && tracked.totals) {
+            io.to(`tenant_${statusTenantId}`).emit('broadcast_stats_updated', { campaignId: tracked.campaignId, ...tracked.totals });
           }
         } catch (stErr) {
           console.error(`[Meta Webhook] Error processing status ${st.messageId}:`, stErr);

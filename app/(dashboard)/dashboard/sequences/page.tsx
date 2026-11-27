@@ -70,6 +70,7 @@ interface TemplateOption {
   name: string;
   channel: string;
   subject?: string | null;
+  status?: string;
 }
 
 interface ListOption {
@@ -571,7 +572,8 @@ export default function SequencesPage() {
 
                 {builderSteps.map((st, index) => {
                   const channel = st.type === 'SEND_EMAIL' ? 'EMAIL' : st.type === 'SEND_WHATSAPP' ? 'WHATSAPP' : null;
-                  const options = channel ? templates.filter((t) => t.channel === channel) : [];
+                  // A WhatsApp step can only use a template Meta has approved.
+                  const options = channel ? templates.filter((t) => t.channel === channel && (channel !== 'WHATSAPP' || t.status === 'APPROVED')) : [];
                   return (
                     <div key={st.id} className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-2">
                       <div className="flex items-center gap-2">
@@ -619,7 +621,7 @@ export default function SequencesPage() {
                           )}
                           {options.length === 0 && (
                             <p className="col-span-2 text-amber-700 font-semibold">
-                              No {channel === 'EMAIL' ? 'email' : 'WhatsApp'} templates yet. Create one under Templates first.
+                              {channel === 'EMAIL' ? 'No email templates yet. Create one under Templates first.' : 'No Meta-approved WhatsApp templates yet. Create one under Templates and wait for approval.'}
                             </p>
                           )}
                         </div>

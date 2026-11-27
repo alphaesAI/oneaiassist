@@ -88,7 +88,9 @@ export async function POST(req: Request) {
         header: header || null,
         footer: footer || null,
         ctaButtons: ctaButtons || null,
-        status: status || 'APPROVED',
+        // A WhatsApp template can never be created as approved: only Meta approves it.
+        // Email templates need no outside review.
+        status: channel === 'EMAIL' ? status || 'APPROVED' : 'DRAFT',
       },
     });
 

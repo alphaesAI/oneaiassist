@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
 import { EmailTemplateEngine } from '@/lib/email/templateEngine';
+import { WhatsAppTemplateError, WhatsAppTemplateService } from '@/lib/whatsapp/templateService';
+import { normalizeButtons, normalizeTemplateName } from '@/lib/whatsapp/templateRules';
 
 export async function GET(req: Request) {
   try {
@@ -54,6 +56,14 @@ export async function GET(req: Request) {
         footer: true,
         ctaButtons: true,
         status: true,
+        headerType: true,
+        variables: true,
+        metaTemplateId: true,
+        metaStatus: true,
+        rejectionReason: true,
+        qualityScore: true,
+        submittedAt: true,
+        lastSyncedAt: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -87,6 +97,7 @@ export async function POST(req: Request) {
       header,
       footer,
       ctaButtons,
+      variables,
       autoSubmit = false,
     } = bodyData;
 
@@ -104,12 +115,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // Format name to lowercase with underscores
-    const formattedName = name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9_]/g, '_')
-      .replace(/_+/g, '_');
+    // Template names are lowercase letters, numbers and underscores (Meta's rule for WhatsApp).
+    const formattedName = normalizeTemplateName(name);
+    if (!formattedName) {
+      return NextResponse.json({ error: 'Template name must contain letters or numbers.' }, { status: 400 });
+    }
+    if (channel === 'WHATSAPP' && !String(body || '').trim()) {
+      return NextResponse.json({ error: 'The message body is required.' }, { status: 400 });
+    }
 
     // Check duplicate name per tenant
     const existing = await db.template.findFirst({
@@ -123,15 +136,11 @@ export async function POST(req: Request) {
       );
     }
 
-    let initialStatus = 'DRAFT';
-
-    if (autoSubmit && channel === 'WHATSAPP') {
-      console.log(`[META TEMPLATE STUB] Submitting template "${formattedName}" to Meta WABA endpoint...`);
-      initialStatus = 'PENDING';
-    } else if (channel === 'EMAIL') {
-      // Email templates don't require Meta approval; they are immediately APPROVED
-      initialStatus = 'APPROVED';
-    }
+    // A WhatsApp template always starts as a draft. It becomes PENDING only when Meta accepts the
+    // submission, and APPROVED only when Meta approves it. Email templates need no outside review.
+    const initialStatus = channel === 'EMAIL' ? 'APPROVED' : 'DRAFT';
+    const isWhatsApp = channel === 'WHATSAPP';
+    const cleanHeaderType = isWhatsApp ? String(headerType || 'NONE').toUpperCase() : 'NONE';
 
     const rawHtml = htmlBody || (channel === 'EMAIL' ? body : '') || '';
     const finalHtml = rawHtml ? EmailTemplateEngine.sanitizeHtml(rawHtml) : '';
@@ -151,14 +160,28 @@ export async function POST(req: Request) {
         jsonDesign: jsonDesign || null,
         body: body || finalPlain || '',
         content: body || finalPlain || '',
-        header,
+        headerType: cleanHeaderType,
+        header: isWhatsApp && cleanHeaderType === 'NONE' ? null : header,
         footer,
-        ctaButtons: ctaButtons || [],
+        ctaButtons: isWhatsApp ? (normalizeButtons(ctaButtons) as any) : ctaButtons || [],
+        variables: isWhatsApp && variables && typeof variables === 'object' ? variables : undefined,
         status: initialStatus as any,
       },
     });
 
-    return NextResponse.json({ template, success: true }, { status: 201 });
+    if (autoSubmit && isWhatsApp) {
+      try {
+        const submitted = await WhatsAppTemplateService.submit(tenantId, template.id);
+        return NextResponse.json({ template: submitted, success: true, submitted: true }, { status: 201 });
+      } catch (err) {
+        // The draft is kept so no work is lost; the reason it was not submitted is reported.
+        const submitError = err instanceof WhatsAppTemplateError ? err.message : 'The template could not be submitted to Meta.';
+        const problems = err instanceof WhatsAppTemplateError ? err.problems : [];
+        return NextResponse.json({ template, success: true, submitted: false, submitError, problems }, { status: 201 });
+      }
+    }
+
+    return NextResponse.json({ template, success: true, submitted: false }, { status: 201 });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unauthorized';
     return NextResponse.json({ error: msg }, { status: 500 });

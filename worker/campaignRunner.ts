@@ -5,6 +5,8 @@ import { processNextImportJob } from '@/lib/contacts/csvImport';
 import { AbTestingService } from '@/lib/email/abTesting';
 import { CrossChannelJourneyEngine } from '@/lib/email/journeyEngine';
 import { sendEmailJob, type EmailSenderDeps } from './senders/emailSender';
+import { sendWhatsAppJob, type WhatsAppSenderDeps } from './senders/whatsappSender';
+import { dailyLimitForTier, templateBroadcastProblems, toWhatsAppRecipient } from '@/lib/whatsapp/templateSend';
 
 export interface RunnerOptions {
   workerId?: string;
@@ -13,6 +15,7 @@ export interface RunnerOptions {
   staleTimeoutMs?: number;
   now?: () => Date;
   emailDeps?: EmailSenderDeps;
+  whatsappDeps?: WhatsAppSenderDeps;
 }
 
 let rotatingTenantOffset = 0;
@@ -131,11 +134,49 @@ export async function runCampaignTick(opts: RunnerOptions = {}): Promise<{
     if (count === 1) startedCampaigns++;
   }
 
+  // 1b. Start due WhatsApp campaigns. Only accounts on the official Cloud API are sent by this
+  // worker; campaigns of accounts on another WhatsApp connection are left exactly as they are.
+  const dueWhatsApp = await prisma.broadcastCampaign.findMany({
+    where: { channel: 'WHATSAPP', kind: 'BROADCAST', status: 'QUEUED', scheduledAt: { lte: now } },
+    select: { id: true, tenantId: true, template: true },
+  });
+  for (const camp of dueWhatsApp) {
+    const number = await prisma.whatsAppNumber.findUnique({
+      where: { tenantId: camp.tenantId },
+      select: { provider: true, status: true, metaPhoneNumberId: true, metaAccessToken: true },
+    });
+    if (number?.provider !== 'META_CLOUD_API') continue;
+
+    let problem: string | null = null;
+    if (number.status !== 'CONNECTED' || !number.metaPhoneNumberId || !number.metaAccessToken) {
+      problem = 'WhatsApp is not connected. Connect the WhatsApp Cloud API in Settings > WhatsApp and create the campaign again.';
+    } else if (!camp.template) {
+      problem = 'The template for this campaign was deleted.';
+    } else if (camp.template.channel !== 'WHATSAPP' || camp.template.status !== 'APPROVED' || !camp.template.metaTemplateId) {
+      problem = `The template "${camp.template.name}" is not approved by Meta (status: ${camp.template.status}). Only approved templates can be sent.`;
+    } else {
+      const templateProblems = templateBroadcastProblems(camp.template);
+      if (templateProblems.length > 0) problem = templateProblems.join(' ');
+    }
+
+    if (problem) {
+      await prisma.broadcastCampaign.updateMany({
+        where: { id: camp.id, tenantId: camp.tenantId, status: 'QUEUED' },
+        data: { status: 'FAILED', lastError: problem, completedAt: now },
+      });
+      continue;
+    }
+    const { count } = await prisma.broadcastCampaign.updateMany({
+      where: { id: camp.id, tenantId: camp.tenantId, status: 'QUEUED' },
+      data: { status: 'SENDING', startedAt: now },
+    });
+    if (count === 1) startedCampaigns++;
+  }
 
   // 2. Build audience for SENDING campaigns with audienceBuiltAt = null
   const unbuiltCampaigns = await prisma.broadcastCampaign.findMany({
     where: {
-      channel: 'EMAIL',
+      channel: { in: ['EMAIL', 'WHATSAPP'] },
       // Journey step campaigns receive their jobs one contact at a time from the journey
       // engine. Building an audience for one would email people who never entered the journey.
       kind: 'BROADCAST',
@@ -145,6 +186,7 @@ export async function runCampaignTick(opts: RunnerOptions = {}): Promise<{
     select: {
       id: true,
       tenantId: true,
+      channel: true,
       recipientFilter: true,
       segmentId: true,
       isAbTest: true,
@@ -195,11 +237,13 @@ export async function runCampaignTick(opts: RunnerOptions = {}): Promise<{
     const whereClause = await SegmentationService.buildUnifiedCustomerFilter(
       camp.tenantId,
       filterInput,
-      'EMAIL'
+      camp.channel === 'WHATSAPP' ? 'WHATSAPP' : 'EMAIL'
     );
+    const isWhatsApp = camp.channel === 'WHATSAPP';
 
     const totalAudience = await prisma.customer.count({ where: whereClause });
-    const isAb = Boolean(camp.isAbTest);
+    // A/B testing is an email feature; a WhatsApp campaign sends one approved template to everyone.
+    const isAb = Boolean(camp.isAbTest) && !isWhatsApp;
     const testPercent = Math.max(10, Math.min(100, camp.abTestSplit ?? 50));
     const testCount = Math.max(2, Math.min(totalAudience, Math.floor((totalAudience * testPercent) / 100)));
     const countA = isAb && totalAudience > 1 ? Math.floor(testCount / 2) : totalAudience;
@@ -214,7 +258,7 @@ export async function runCampaignTick(opts: RunnerOptions = {}): Promise<{
     while (true) {
       const page = await prisma.customer.findMany({
         where: whereClause,
-        select: { id: true, email: true },
+        select: { id: true, email: true, primaryPhone: true },
         orderBy: { id: 'asc' },
         take: pageSize,
         ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
@@ -225,7 +269,8 @@ export async function runCampaignTick(opts: RunnerOptions = {}): Promise<{
       await prisma.broadcastJob.createMany({
         data: page.map((c) => {
           const email = c.email?.trim().toLowerCase() || '';
-          const hasEmail = Boolean(email && email.includes('@'));
+          const phone = isWhatsApp ? toWhatsAppRecipient(c.primaryPhone) : null;
+          const hasAddress = isWhatsApp ? Boolean(phone) : Boolean(email && email.includes('@'));
 
           const variant = isAb
             ? overallIndex < countA
@@ -241,11 +286,11 @@ export async function runCampaignTick(opts: RunnerOptions = {}): Promise<{
             tenantId: camp.tenantId,
             campaignId: camp.id,
             customerId: c.id,
-            channel: 'EMAIL',
-            recipient: email,
+            channel: isWhatsApp ? ('WHATSAPP' as const) : ('EMAIL' as const),
+            recipient: isWhatsApp ? phone || '' : email,
             variant,
-            status: hasEmail ? 'PENDING' : 'SKIPPED_INVALID',
-            lastError: hasEmail ? null : 'Missing or invalid email address',
+            status: hasAddress ? ('PENDING' as const) : ('SKIPPED_INVALID' as const),
+            lastError: hasAddress ? null : isWhatsApp ? 'Missing or invalid phone number' : 'Missing or invalid email address',
             scheduledFor,
           };
         }),
@@ -391,9 +436,65 @@ export async function runCampaignTick(opts: RunnerOptions = {}): Promise<{
       if (claimed.length === 0) continue;
       claimedJobs += claimed.length;
 
-      // Channel dispatch (WHATSAPP sender will be added in Step W3)
       await runWithConcurrency(claimed, concurrency, async (job) => {
         await sendEmailJob(job, { ...opts.emailDeps, now: nowFn });
+      });
+    }
+  }
+
+  // 3b. Claim and send due WHATSAPP jobs, within each number's Meta messaging limit
+  const waTenantRows = await prisma.$queryRaw<Array<{ tenantId: string }>>`
+    SELECT DISTINCT j."tenantId"
+    FROM "BroadcastJob" j
+    JOIN "BroadcastCampaign" c ON c.id = j."campaignId"
+    WHERE j.channel = 'WHATSAPP'
+      AND j.status = 'PENDING'
+      AND j."scheduledFor" <= ${now}
+      AND c.status = 'SENDING'
+    ORDER BY j."tenantId" ASC
+  `;
+  if (waTenantRows.length > 0) {
+    const startIdx = rotatingTenantOffset % waTenantRows.length;
+    const orderedTenants = [...waTenantRows.slice(startIdx), ...waTenantRows.slice(0, startIdx)];
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60_000);
+
+    for (const { tenantId } of orderedTenants) {
+      const number = await prisma.whatsAppNumber.findUnique({
+        where: { tenantId },
+        select: { provider: true, messagingLimitTier: true },
+      });
+      // Never sent through anything but the official Cloud API.
+      if (number?.provider !== 'META_CLOUD_API') continue;
+
+      const sentLastDay = await prisma.broadcastJob.count({
+        where: { tenantId, channel: 'WHATSAPP', status: 'SENT', processedAt: { gte: oneDayAgo } },
+      });
+      const allowance = Math.min(Math.max(0, dailyLimitForTier(number.messagingLimitTier) - sentLastDay), perLoopCap);
+      if (allowance <= 0) continue;
+
+      const claimed = await prisma.$queryRaw<BroadcastJob[]>`
+        UPDATE "BroadcastJob"
+        SET status = 'PROCESSING', "lockedAt" = ${now}, "lockedBy" = ${workerId}, attempts = attempts + 1
+        WHERE id IN (
+          SELECT j.id
+          FROM "BroadcastJob" j
+          JOIN "BroadcastCampaign" c ON c.id = j."campaignId"
+          WHERE j."tenantId" = ${tenantId}
+            AND j.channel = 'WHATSAPP'
+            AND j.status = 'PENDING'
+            AND j."scheduledFor" <= ${now}
+            AND c.status = 'SENDING'
+          ORDER BY j."scheduledFor" ASC
+          LIMIT ${allowance}
+          FOR UPDATE OF j SKIP LOCKED
+        )
+        RETURNING *
+      `;
+      if (claimed.length === 0) continue;
+      claimedJobs += claimed.length;
+
+      await runWithConcurrency(claimed, concurrency, async (job) => {
+        await sendWhatsAppJob(job, { ...opts.whatsappDeps, now: nowFn });
       });
     }
   }
@@ -401,7 +502,7 @@ export async function runCampaignTick(opts: RunnerOptions = {}): Promise<{
   // 4. Finish campaigns
   const activeCampaigns = await prisma.broadcastCampaign.findMany({
     where: {
-      channel: 'EMAIL',
+      channel: { in: ['EMAIL', 'WHATSAPP'] },
       // Journey step campaigns stay open for as long as the journey exists; they are never "finished".
       kind: 'BROADCAST',
       status: 'SENDING',

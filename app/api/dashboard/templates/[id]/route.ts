@@ -15,6 +15,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
 
+    if (existing.channel === 'WHATSAPP' && existing.status === 'PENDING') {
+      return NextResponse.json(
+        { error: 'This template is being reviewed by Meta and cannot be changed until the review is finished.' },
+        { status: 409 }
+      );
+    }
+
     const body = await req.json();
     const rawHtml = body.htmlBody !== undefined ? body.htmlBody : (existing.htmlBody ?? '');
     const finalHtml = rawHtml ? EmailTemplateEngine.sanitizeHtml(rawHtml) : '';
@@ -33,6 +40,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         body: finalPlain,
         content: finalPlain,
         plainText: finalPlain,
+        // Changed WhatsApp content is no longer what Meta approved; it must be submitted again.
+        ...(existing.channel === 'WHATSAPP' ? { status: 'DRAFT' as const, rejectionReason: null } : {}),
       },
     });
 

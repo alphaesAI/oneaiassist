@@ -3,6 +3,7 @@ import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
 import { sessions, qrCodes, pairingCodes } from '@/whatsapp-engine/engine-logic';
 import { getSocketIO } from '@/lib/socket-server';
+import { DISCONNECTED_LINE } from '@/lib/whatsapp/connection';
 
 export async function POST() {
   try {
@@ -28,7 +29,7 @@ export async function POST() {
     await db.whatsAppNumber.upsert({
       where: { tenantId },
       create: { tenantId, sessionData: '', status: 'DISCONNECTED', phoneNumber: null },
-      update: { sessionData: '', status: 'DISCONNECTED', phoneNumber: null },
+      update: { ...DISCONNECTED_LINE },
     });
 
     const io = getSocketIO();

@@ -9,6 +9,13 @@ import { validateJourneySteps } from '../../lib/email/journeyValidation';
 import { encrypt } from '../../lib/encryption';
 
 describe('Step E10: Automations (Journeys) - Worker Execution, Concurrency, Triggers & Resilience', () => {
+  /** 17:00 UTC today (midday in New York, the test tenant's time zone): outside the default
+   *  21:00-08:00 quiet hours whatever time the tests run. */
+  const middayUtc = () => {
+    const d = new Date();
+    d.setUTCHours(17, 0, 0, 0);
+    return d;
+  };
   const testId = `e10_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   let tenantId: string;
   let otherTenantId: string;
@@ -286,7 +293,8 @@ describe('Step E10: Automations (Journeys) - Worker Execution, Concurrency, Trig
     await prisma.journeyEnrollment.update({ where: { id: enrollment.id }, data: { attempts: 2 } });
 
     // Attempt 3: reached max attempts (3) -> should mark status as FAILED
-    const failStepRes = await CrossChannelJourneyEngine.executeStep(tenantId, enrollment.id);
+    // A fixed midday clock: the result must not depend on whether the test runs during quiet hours.
+    const failStepRes = await CrossChannelJourneyEngine.executeStep(tenantId, enrollment.id, { now: middayUtc });
     assert.equal(failStepRes.status, 'FAILED');
 
     const failedEnrollment = await prisma.journeyEnrollment.findUniqueOrThrow({
@@ -375,7 +383,7 @@ describe('Step E10: Automations (Journeys) - Worker Execution, Concurrency, Trig
     assert.ok(enrollRes.success);
 
     // Executing branch with invalid indices must not crash; falls back to currentStepIndex + 1
-    const res = await CrossChannelJourneyEngine.executeStep(tenantId, enrollRes.enrollmentId!);
+    const res = await CrossChannelJourneyEngine.executeStep(tenantId, enrollRes.enrollmentId!, { now: middayUtc });
     assert.equal(res.status, 'STEP_EXECUTED');
 
     const updatedEnrollment = await prisma.journeyEnrollment.findUniqueOrThrow({

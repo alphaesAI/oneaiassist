@@ -2,8 +2,12 @@ import 'dotenv/config';
 import { prisma } from '@/lib/db';
 import { runCampaignTick } from './campaignRunner';
 import { assertTrackingSecretConfigured } from '@/lib/email/tracking';
+import { WhatsAppTemplateService } from '@/lib/whatsapp/templateService';
 
 const POLL_MS = Number(process.env.WORKER_POLL_MS || 5000);
+// How often WhatsApp templates waiting for Meta's review are checked, in case a webhook was missed.
+const TEMPLATE_SYNC_MS = Number(process.env.WHATSAPP_TEMPLATE_SYNC_MS || 5 * 60_000);
+let lastTemplateSyncAt = 0;
 
 let shuttingDown = false;
 let inFlightTick: Promise<unknown> | null = null;
@@ -39,6 +43,19 @@ async function startWorker() {
     } catch (err) {
       inFlightTick = null;
       console.error('[Worker] Tick error:', err);
+    }
+
+    if (!shuttingDown && Date.now() - lastTemplateSyncAt >= TEMPLATE_SYNC_MS) {
+      lastTemplateSyncAt = Date.now();
+      try {
+        inFlightTick = WhatsAppTemplateService.syncPendingTenants();
+        const result = (await inFlightTick) as { tenants: number; failed: number };
+        if (result.tenants > 0) console.log('[Worker] WhatsApp template sync:', JSON.stringify(result));
+      } catch (err) {
+        console.error('[Worker] WhatsApp template sync error:', err);
+      } finally {
+        inFlightTick = null;
+      }
     }
 
     if (shuttingDown) break;

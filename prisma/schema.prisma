@@ -589,6 +589,14 @@ model BroadcastJob {
   lockedBy          String?
   scheduledFor      DateTime
   processedAt       DateTime?
+  // Delivery tracking reported by the provider (WhatsApp: Meta webhook)
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  errorCode         String? // The provider's own error code for a failed delivery
+  // WhatsApp: the contact answered this message / opted out in answer to it
+  repliedAt         DateTime?
+  optedOutAt        DateTime?
 
   // Relations
   tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -602,6 +610,7 @@ model BroadcastJob {
   @@index([status, scheduledFor])
   @@index([tenantId, status, scheduledFor])
   @@index([providerMessageId])
+  @@index([tenantId, providerMessageId])
 }
 
 model ReminderJob {
@@ -630,10 +639,16 @@ model WhatsAppNumber {
   phoneNumber     String? // Encrypted
   qualityRating   String? // green/yellow/red quality indicator
   provider        String               @default("BAILEYS") // "BAILEYS" | "META_CLOUD_API"
-  metaPhoneNumberId String?
+  metaPhoneNumberId String?            @unique // one Meta phone number can only ever belong to one tenant
   metaWabaId        String?
-  metaAccessToken   String?            @db.Text
-  metaVerifyToken   String?
+  metaAccessToken   String?            @db.Text // Encrypted (lib/encryption). Never stored or returned in plain text.
+  metaVerifyToken   String? // No longer used: the webhook verify token is the platform env META_WEBHOOK_VERIFY_TOKEN
+  displayPhoneNumber  String? // As reported by Meta, e.g. "+1 555 010 0000"
+  verifiedName        String? // Business display name approved by Meta
+  messagingLimitTier  String? // Meta messaging tier, when Meta reports one
+  lastVerifiedAt      DateTime? // Last time Meta confirmed these credentials
+  webhookSubscribedAt DateTime? // When our app was subscribed to this account's webhooks
+  lastError           String?   @db.Text
 
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -671,6 +686,8 @@ enum TemplateStatus {
   PENDING
   APPROVED
   REJECTED
+  PAUSED   // Meta paused the template because of low quality; it cannot be sent while paused
+  DISABLED // Meta disabled the template; it cannot be sent
 }
 
 model Template {
@@ -693,12 +710,23 @@ model Template {
   status             TemplateStatus      @default(DRAFT)
   createdAt          DateTime            @default(now())
 
+  // WhatsApp (Meta) template details
+  headerType         String              @default("NONE") // NONE | TEXT
+  variables          Json?               // { body: [{ index, example, source }], header: [...], buttonUrlExample }
+  metaTemplateId     String?             // Meta's ID once the template has been submitted
+  metaStatus         String?             // The exact status word Meta last reported
+  rejectionReason    String?             @db.Text
+  qualityScore       String?
+  submittedAt        DateTime?
+  lastSyncedAt       DateTime?
+
   // Relations
   tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   broadcastCampaigns BroadcastCampaign[]
 
   @@index([tenantId])
   @@index([channel])
+  @@index([tenantId, metaTemplateId])
 }
 
 model AuditLog {

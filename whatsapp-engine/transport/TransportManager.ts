@@ -161,22 +161,26 @@ export class OpenWATransportAdapter implements IMessageTransport {
 export class TransportManager {
   private static instances = new Map<string, IMessageTransport>();
 
-  static async getTransportAsync(tenantId: string): Promise<IMessageTransport> {
-    let transport = this.instances.get(tenantId);
-    if (!transport) {
-      const db = getTenantPrisma(tenantId, 'ADMIN');
-      const number = await db.whatsAppNumber.findUnique({ where: { tenantId } });
+  /**
+   * The transport to use for a tenant and channel. For WhatsApp the tenant's provider is read from
+   * the database every time, so a tenant on the official Cloud API always sends through Meta and
+   * can never be sent through Baileys/OpenWA by a stale cached instance.
+   */
+  static async resolveTransport(tenantId: string, channel: string = 'WHATSAPP'): Promise<IMessageTransport> {
+    if (channel !== 'WHATSAPP') return this.getTransport(tenantId, channel);
 
-      if (number?.provider === 'META_CLOUD_API') {
-        transport = new MetaCloudTransportAdapter(tenantId);
-      } else if (process.env.WA_ENGINE === 'OPENWA' || openwaSessions.has(tenantId)) {
-        transport = new OpenWATransportAdapter(tenantId);
-      } else {
-        transport = new BaileysTransportAdapter(tenantId);
-      }
-      this.instances.set(tenantId, transport);
+    const db = getTenantPrisma(tenantId, 'ADMIN');
+    const number = await db.whatsAppNumber.findUnique({ where: { tenantId }, select: { provider: true } });
+    if (number?.provider === 'META_CLOUD_API') {
+      // Stateless: credentials are read per send, so nothing is cached.
+      return new MetaCloudTransportAdapter(tenantId);
     }
-    return transport;
+    return this.getTransport(tenantId, channel);
+  }
+
+  /** @deprecated Use resolveTransport. Kept for existing callers. */
+  static async getTransportAsync(tenantId: string): Promise<IMessageTransport> {
+    return this.resolveTransport(tenantId, 'WHATSAPP');
   }
 
   static getTransport(tenantId: string, channel: string = 'WHATSAPP'): IMessageTransport {

@@ -23,6 +23,9 @@ import {
 import { MessageService } from './whatsapp-engine/MessageService';
 import { TransportManager } from './whatsapp-engine/transport/TransportManager';
 import { enqueueInboundJob } from './whatsapp-engine/agents/IngressService';
+import { usesOfficialApi, WhatsAppWindowClosedError } from './lib/whatsapp/serviceWindow';
+import { DISCONNECTED_LINE } from './lib/whatsapp/connection';
+import { captureRawBody } from './lib/whatsapp/webhookAuth';
 import { createMetaWebhookRouter } from './whatsapp-engine/routes/metaWebhook';
 import { createIMessageWebhookRouter } from './whatsapp-engine/routes/imessageWebhook';
 import { createInstagramWebhookRouter } from './whatsapp-engine/routes/instagramWebhook';
@@ -47,8 +50,13 @@ nextApp.prepare().then(() => {
   app.use(cors());
 
   // Scope express.json() only to Express endpoints so Next.js App Router request body streams remain undisturbed
-  const expressJson = express.json();
-  app.use('/api/whatsapp', expressJson);
+  // The raw bytes are kept on req.rawBody: Meta webhook signatures are checked against them.
+  const expressJson = express.json({ verify: captureRawBody });
+  // Only the endpoints answered by Express below get their body parsed here. Other /api/whatsapp/*
+  // routes (meta-config, send-template, ...) belong to the Next.js app, which must read the body itself.
+  for (const path of ['connect', 'status', 'disconnect', 'send', 'typing', 'webchat/inbound', 'emit']) {
+    app.use(`/api/whatsapp/${path}`, (req, res, next) => (req.path === '/' ? expressJson(req, res, next) : next()));
+  }
   app.use('/api/webhook/meta', expressJson);
   app.use('/api/webhooks/imessage', expressJson);
   app.use('/api/webhooks/instagram', expressJson);
@@ -202,7 +210,7 @@ nextApp.prepare().then(() => {
       await db.whatsAppNumber.upsert({
         where: { tenantId },
         create: { tenantId, sessionData: '', status: 'DISCONNECTED', phoneNumber: null },
-        update: { sessionData: '', status: 'DISCONNECTED', phoneNumber: null },
+        update: { ...DISCONNECTED_LINE },
       });
 
       io.to(`tenant_${tenantId}`).emit('whatsapp_status', { status: 'DISCONNECTED' });
@@ -224,7 +232,8 @@ nextApp.prepare().then(() => {
         return res.status(400).json({ error: 'Either text or mediaId is required' });
       }
 
-      let hasSession = sessions.has(tenantId) || openwaSessions.has(tenantId);
+      // An account on the official API sends through Meta and has no device session to check.
+      let hasSession = (await usesOfficialApi(tenantId)) || sessions.has(tenantId) || openwaSessions.has(tenantId);
       if (!hasSession) {
         try {
           const db = getTenantPrisma(tenantId, 'ADMIN');
@@ -257,6 +266,7 @@ nextApp.prepare().then(() => {
 
       return res.json(result);
     } catch (err: unknown) {
+      if (err instanceof WhatsAppWindowClosedError) return res.status(err.status).json({ error: err.message, code: err.code });
       const msg = err instanceof Error ? err.message : 'Outbound send error';
       return res.status(500).json({ error: msg });
     }
@@ -269,7 +279,7 @@ nextApp.prepare().then(() => {
       if (!tenantId || !to) {
         return res.status(400).json({ error: 'tenantId and to are required' });
       }
-      const transport = TransportManager.getTransport(tenantId);
+      const transport = await TransportManager.resolveTransport(tenantId);
       await transport.setTyping(to, on !== false);
       return res.json({ success: true });
     } catch (err: unknown) {

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SearchableTagSelect } from '@/components/ui/searchable-tag-select';
 import { useTenantInfo } from '@/hooks/useTenantInfo';
 import { getClientSocket } from '@/lib/socket-client';
+import { WhatsAppCampaignReportModal } from '@/components/whatsapp/WhatsAppCampaignReportModal';
 
 type TemplateCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
 type TemplateStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -28,6 +29,7 @@ interface Template {
 interface Campaign {
   id: string;
   name: string;
+  lastError?: string | null;
   channel?: 'WHATSAPP' | 'EMAIL' | 'INSTAGRAM';
   subject?: string | null;
   previewText?: string | null;
@@ -54,6 +56,7 @@ export default function BroadcastCenterPage() {
   const templateBodyRef = useRef<HTMLTextAreaElement>(null);
 
   // Form State
+  const [reportCampaignId, setReportCampaignId] = useState<string | null>(null);
   const [campaignName, setCampaignName] = useState('');
   const [campaignChannel, setCampaignChannel] = useState<'WHATSAPP' | 'EMAIL'>('WHATSAPP');
   const [emailSubject, setEmailSubject] = useState('');
@@ -1111,6 +1114,11 @@ export default function BroadcastCenterPage() {
                       <tr key={camp.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4">
                           <div className="font-bold text-xs text-[#004ac6]">{camp.name}</div>
+                          {camp.lastError && ['FAILED', 'PAUSED'].includes(camp.status) && (
+                            <div role="alert" className="mt-1 text-[11px] font-medium text-rose-700 max-w-xs whitespace-normal">
+                              {camp.lastError}
+                            </div>
+                          )}
                           <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
                             {camp.template?.name || 'Manual'} ({camp.status})
                           </div>
@@ -1165,6 +1173,17 @@ export default function BroadcastCenterPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {camp.channel === 'WHATSAPP' && (
+                              <button
+                                type="button"
+                                title="View report"
+                                aria-label={`View report for ${camp.name}`}
+                                onClick={() => setReportCampaignId(camp.id)}
+                                className="p-1 rounded bg-blue-50 text-[#004ac6] hover:bg-blue-100 text-xs"
+                              >
+                                <span className="material-symbols-outlined text-sm">bar_chart</span>
+                              </button>
+                            )}
                             {camp.status === 'QUEUED' && (
                               <button
                                 type="button"
@@ -1384,6 +1403,7 @@ export default function BroadcastCenterPage() {
           </div>
         </div>
       )}
+      <WhatsAppCampaignReportModal campaignId={reportCampaignId} isOpen={!!reportCampaignId} onClose={() => setReportCampaignId(null)} />
     </div>
   );
 }

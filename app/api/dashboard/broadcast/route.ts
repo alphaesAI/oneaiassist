@@ -3,6 +3,7 @@ import { getTenantContext } from '@/lib/tenant';
 import { getTenantPrisma } from '@/lib/db';
 import { sendWhatsAppMessage } from '@/lib/whatsapp';
 import { CampaignService } from '@/lib/email/campaignService';
+import { templateBroadcastProblems } from '@/lib/whatsapp/templateSend';
 
 function buildDateFilter(start?: string | null, end?: string | null) {
   let gte: Date | undefined;
@@ -89,7 +90,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { tenantId, role } = await getTenantContext();
+    const { tenantId, role, userId } = await getTenantContext();
     const db = getTenantPrisma(tenantId, role);
 
     const body = await req.json();
@@ -164,6 +165,35 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
 
+    // An account on the official WhatsApp API can only send templates that Meta approved, and its
+    // campaigns are sent by the background worker through the queue (never inline in this request).
+    let whatsAppViaCloudApi = false;
+    if (channel === 'WHATSAPP') {
+      const waNumber = await db.whatsAppNumber.findUnique({
+        where: { tenantId },
+        select: { provider: true, status: true, metaPhoneNumberId: true, metaAccessToken: true },
+      });
+      if (waNumber?.provider === 'META_CLOUD_API') {
+        whatsAppViaCloudApi = true;
+        const problems: string[] = [];
+        if (waNumber.status !== 'CONNECTED' || !waNumber.metaPhoneNumberId || !waNumber.metaAccessToken) {
+          problems.push('WhatsApp is not connected. Connect the WhatsApp Cloud API in Settings > WhatsApp.');
+        }
+        if (template.channel !== 'WHATSAPP' || template.status !== 'APPROVED' || !template.metaTemplateId) {
+          problems.push(
+            template.status === 'PENDING'
+              ? "This template is still waiting for Meta's review. It can be used once Meta approves it."
+              : 'This template is not approved by Meta. Submit it for review in Templates and wait for approval.'
+          );
+        } else {
+          problems.push(...templateBroadcastProblems(template));
+        }
+        if (problems.length > 0) {
+          return NextResponse.json({ error: problems.join(' '), problems }, { status: 400 });
+        }
+      }
+    }
+
     // Pre-send checks for email, enforced here so they cannot be skipped by calling the API directly.
     if (channel === 'EMAIL') {
       const problems: string[] = [];
@@ -220,6 +250,41 @@ export async function POST(req: Request) {
         },
       });
       return NextResponse.json(campaign, { status: 202 });
+    }
+
+    // WHATSAPP on the official Cloud API: enqueue only. The worker builds the audience, respects
+    // Meta's messaging limit, and sends each message through Meta.
+    if (whatsAppViaCloudApi) {
+      if (idempotencyKey) {
+        const existing = await db.broadcastCampaign.findFirst({
+          where: { tenantId, idempotencyKey, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+        });
+        if (existing) return NextResponse.json(existing, { status: 202 });
+      }
+      const campaign = await db.broadcastCampaign.create({
+        data: {
+          tenantId,
+          name,
+          channel: 'WHATSAPP',
+          templateId,
+          segmentId: segmentId || null,
+          recipientFilter: effectiveFilter,
+          scheduledAt: scheduledAt ? new Date(scheduledAt) : new Date(),
+          status: 'QUEUED',
+          sent: 0,
+          cost: 0,
+          idempotencyKey,
+        },
+      });
+      await db.auditLog.create({
+        data: {
+          tenantId,
+          userId,
+          action: 'CAMPAIGN_QUEUED',
+          metadata: { campaignId: campaign.id, campaignName: campaign.name, channel: 'WHATSAPP' },
+        },
+      });
+      return NextResponse.json({ ...campaign, success: true, campaignId: campaign.id }, { status: 202 });
     }
 
     // 2. Query target customers based on unified segmentation (WhatsApp branch)

@@ -119,8 +119,15 @@ export async function handleMessageStatusUpdate(
       readAt: updatedMsg.readAt,
     });
 
+    // A message sent by the campaign queue is tracked exactly, per job, by Meta's message ID
+    // (lib/whatsapp/deliveryTracking). The older estimate below is only for messages that have no such job.
+    const trackedJob = await db.broadcastJob.findFirst({
+      where: { tenantId, providerMessageId: channelMessageId },
+      select: { id: true },
+    });
+
     // Check if this message was sent to a customer associated with a broadcast campaign
-    if (message.conversation?.customerId) {
+    if (!trackedJob && message.conversation?.customerId) {
       const customerId = message.conversation.customerId;
       const recentJob = await db.broadcastJob.findFirst({
         where: {

@@ -1,70 +1,34 @@
 import { NextResponse } from 'next/server';
 import { getTenantContext } from '@/lib/tenant';
-import { getTenantPrisma } from '@/lib/db';
+import { WhatsAppTemplateError, WhatsAppTemplateService } from '@/lib/whatsapp/templateService';
 
-export async function POST(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+/** Sends a WhatsApp template to Meta for review. */
+export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
-    const { tenantId, role } = await getTenantContext();
-    const db = getTenantPrisma(tenantId, role);
+    const { tenantId } = await getTenantContext();
+    if (!tenantId) return NextResponse.json({ error: 'No account selected.' }, { status: 400 });
 
-    const template = await db.template.findUnique({
-      where: { id: params.id },
-    });
-
-    if (!template || template.tenantId !== tenantId) {
-      return NextResponse.json({ error: 'Template not found' }, { status: 404 });
-    }
-
-    if (template.status !== 'DRAFT' && template.status !== 'REJECTED') {
-      return NextResponse.json(
-        { error: `Cannot submit template in "${template.status}" state.` },
-        { status: 400 }
-      );
-    }
-
-    // =========================================================================
-    // TODO: Meta WhatsApp Business API Integration
-    // Replace stub with live Graph API call:
-    //
-    // const res = await fetch(`https://graph.facebook.com/v18.0/${WABA_ID}/message_templates`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({
-    //     name: template.name,
-    //     category: template.category,
-    //     language: template.language,
-    //     components: [
-    //       template.headerType !== 'NONE' ? { type: 'HEADER', format: template.headerType, text: template.header } : null,
-    //       { type: 'BODY', text: template.body },
-    //       template.footer ? { type: 'FOOTER', text: template.footer } : null,
-    //       template.ctaButtons ? { type: 'BUTTONS', buttons: template.ctaButtons } : null
-    //     ].filter(Boolean),
-    //   }),
-    // });
-    // =========================================================================
-
-    console.log(`[META SUBMISSION STUB] Template "${template.name}" submitted for approval to Meta.`);
-
-    const updated = await db.template.update({
-      where: { id: params.id },
-      data: {
-        status: 'PENDING',
-      },
-    });
-
+    const template = await WhatsAppTemplateService.submit(tenantId, params.id);
     return NextResponse.json({
       success: true,
-      template: updated,
-      message: 'Template submitted for approval to WhatsApp Meta services.',
+      template,
+      message:
+        template.status === 'APPROVED'
+          ? 'Meta approved the template.'
+          : template.status === 'REJECTED'
+          ? 'Meta rejected the template.'
+          : 'Submitted to Meta. It is now waiting for review.',
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Unauthorized';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    if (err instanceof WhatsAppTemplateError) {
+      return NextResponse.json({ error: err.message, problems: err.problems }, { status: err.status });
+    }
+    const msg = err instanceof Error ? err.message : '';
+    const unauthorized = msg.startsWith('Unauthorized');
+    if (!unauthorized) console.error('[Template submit]', msg);
+    return NextResponse.json(
+      { error: unauthorized ? msg : 'The template could not be submitted.' },
+      { status: unauthorized ? 401 : 500 }
+    );
   }
 }

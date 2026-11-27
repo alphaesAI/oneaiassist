@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { isValidMetaSignature, isValidWebhookVerifyToken } from '../../lib/whatsapp/webhookAuth';
 import crypto from 'node:crypto';
 import { prisma } from '../../lib/db/index';
 import { InstagramNormalizer } from '../InstagramNormalizer';
@@ -17,14 +18,13 @@ export function createInstagramWebhookRouter(io: any) {
       const token = req.query['hub.verify_token'];
       const challenge = req.query['hub.challenge'];
 
-      const defaultToken = process.env.META_VERIFY_TOKEN || 'oneai_meta_verify_secret_123';
-
-      if (mode === 'subscribe' && (token === defaultToken || token)) {
-        console.log(`[Instagram Webhook] Verification successful for token: ${token}`);
-        return res.status(200).send(challenge);
+      // Same platform verify token as the WhatsApp webhook. No default value, and not "any token".
+      if (mode === 'subscribe' && isValidWebhookVerifyToken(token)) {
+        console.log('[Instagram Webhook] Verification handshake accepted.');
+        return res.status(200).send(String(challenge ?? ''));
       }
 
-      console.warn(`[Instagram Webhook] Verification failed for mode: ${mode}, token: ${token}`);
+      console.warn(`[Instagram Webhook] Verification handshake refused (mode: ${String(mode)}).`);
       return res.sendStatus(403);
     } catch (err) {
       console.error('[Instagram Webhook] Error during GET handshake:', err);
@@ -38,27 +38,16 @@ export function createInstagramWebhookRouter(io: any) {
    */
   router.post('/api/webhooks/instagram', async (req, res) => {
     try {
-      // 1. Immediately acknowledge event to Meta server
+      // 1. Only requests signed by Meta with our app secret are processed.
+      if (!isValidMetaSignature((req as any).rawBody, req.headers['x-hub-signature-256'])) {
+        console.warn('[Instagram Webhook] Rejected a request with a missing or invalid signature.');
+        return res.sendStatus(401);
+      }
+
+      // 2. Acknowledge the event to Meta
       res.status(200).send('EVENT_RECEIVED');
 
       const body = req.body;
-      const signature = req.headers['x-hub-signature-256'] as string;
-      const appSecret = process.env.META_APP_SECRET;
-
-      // 2. HMAC-SHA256 signature verification if secret is provided
-      if (appSecret && signature) {
-        try {
-          const rawBody = JSON.stringify(body);
-          const hmac = crypto.createHmac('sha256', appSecret);
-          const expectedSig = 'sha256=' + hmac.update(rawBody).digest('hex');
-          if (signature !== expectedSig) {
-            console.warn('[Instagram Webhook] Invalid HMAC signature. Rejecting spoofed request.');
-            return;
-          }
-        } catch (sigErr) {
-          console.warn('[Instagram Webhook] Signature check warning:', sigErr);
-        }
-      }
 
       // 3. Normalize incoming payload
       const parsed = InstagramNormalizer.parsePayload(body);
