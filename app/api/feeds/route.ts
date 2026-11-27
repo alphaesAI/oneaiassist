@@ -11,6 +11,8 @@ const AddFeedBody = z.object({
   category: z.string().trim().max(50).default('Featured'),
 });
 
+export const dynamic = 'force-dynamic';
+
 export const GET = authed(async (_req, user) => {
   const feeds = await prisma.feed.findMany({
     where: { tenantId: user.tenantId },

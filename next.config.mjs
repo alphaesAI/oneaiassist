@@ -5,7 +5,7 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
-    serverComponentsExternalPackages: ['@open-wa/wa-automate', '@whiskeysockets/baileys', 'puppeteer-extra-plugin-devtools', 'puppeteer-extra', 'puppeteer-extra-plugin-stealth', 'clone-deep'],
+    serverComponentsExternalPackages: ['@open-wa/wa-automate', '@whiskeysockets/baileys', 'puppeteer-extra-plugin-devtools', 'puppeteer-extra', 'puppeteer-extra-plugin-stealth', 'clone-deep', 'undici'],
   },
   webpack: (config, { isServer }) => {
     if (isServer) {
