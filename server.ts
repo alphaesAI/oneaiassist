@@ -61,6 +61,12 @@ nextApp.prepare().then(() => {
   app.use('/api/webhooks/imessage', expressJson);
   app.use('/api/webhooks/instagram', expressJson);
 
+  // Health check for the container. Only this custom server answers it, which is the point:
+  // webhooks and Socket.io do not exist under plain "next start".
+  app.get('/healthz', (_req, res) => {
+    res.json({ ok: true });
+  });
+
   const server = http.createServer(app);
 
   // Attach Socket.io to the exact same HTTP server on /socket.io

@@ -55,9 +55,11 @@ ENV NODE_ENV=production
 # Expose HTTP & Socket.IO unified port
 EXPOSE 3000
 
-# Container healthcheck
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:3000/api/tenant/info || exit 1
+# Container healthcheck. /healthz is answered by the custom server (server.ts) only, so this also
+# fails if the container was started with plain "next start".
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-3000}/healthz || exit 1
 
-# Start the unified application
-CMD ["npm", "run", "start"]
+# Start the web server (server.ts: app + Socket.io + webhooks) and the campaign worker.
+# Run node directly, not through npm, so the stop signal reaches it and the worker can finish cleanly.
+CMD ["node", "scripts/start-prod.js"]
